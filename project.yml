@@ -1,0 +1,30 @@
+name: StudyCast
+options:
+  bundleIdPrefix: com.visionone
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  StudyCast:
+    type: application
+    platform: macOS
+    sources:
+      - Sources
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: StudyCast
+        LSMinimumSystemVersion: "14.0"
+        NSLocalNetworkUsageDescription: "StudyCast runs AirPlay receivers to record Vision Pro headset views on your local network."
+        NSBonjourServices:
+          - _airplay._tcp
+          - _raop._tcp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.visionone.StudyCast
+        PRODUCT_NAME: StudyCast

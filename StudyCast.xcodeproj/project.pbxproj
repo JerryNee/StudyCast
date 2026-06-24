@@ -1,0 +1,300 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		69AB2D5F94028AE2A3EB86C5 /* StudyCastApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97A104FA6D3E1C259AEA6A9F /* StudyCastApp.swift */; };
+		6DEFB2AC20FE38299CBBD558 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8A0265C9F87018258AC4C80 /* ContentView.swift */; };
+		B74171E49FDA20AF18BA503A /* Station.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4BE570131FD02FE1729A32D /* Station.swift */; };
+		BDC0D2C7A30EC569A70D295C /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6327135392501F05CA37C671 /* AppModel.swift */; };
+		F857ED2F01D541803A8065F0 /* UxPlayProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0ACCFEB978BA874082BC10F /* UxPlayProcess.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0FDAFC80A1BD2C77CF5E0390 /* StudyCast.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StudyCast.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6327135392501F05CA37C671 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		97A104FA6D3E1C259AEA6A9F /* StudyCastApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyCastApp.swift; sourceTree = "<group>"; };
+		E8A0265C9F87018258AC4C80 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		F0ACCFEB978BA874082BC10F /* UxPlayProcess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UxPlayProcess.swift; sourceTree = "<group>"; };
+		F4BE570131FD02FE1729A32D /* Station.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Station.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		2250484689E33A51CD60EE6B = {
+			isa = PBXGroup;
+			children = (
+				35764D9A9A768C6B43B839AB /* Sources */,
+				2BA431C2E5814A7786ABC85F /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		2BA431C2E5814A7786ABC85F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				0FDAFC80A1BD2C77CF5E0390 /* StudyCast.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		35764D9A9A768C6B43B839AB /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				6327135392501F05CA37C671 /* AppModel.swift */,
+				E8A0265C9F87018258AC4C80 /* ContentView.swift */,
+				F4BE570131FD02FE1729A32D /* Station.swift */,
+				97A104FA6D3E1C259AEA6A9F /* StudyCastApp.swift */,
+				F0ACCFEB978BA874082BC10F /* UxPlayProcess.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2F34C4012AAA5DCE7A32F882 /* StudyCast */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DC783A65478DFFC77851B746 /* Build configuration list for PBXNativeTarget "StudyCast" */;
+			buildPhases = (
+				6F2BCE20448240C2E82326DE /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = StudyCast;
+			packageProductDependencies = (
+			);
+			productName = StudyCast;
+			productReference = 0FDAFC80A1BD2C77CF5E0390 /* StudyCast.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		4CFCD00664FC1B47EEC774DC /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = 098E4E3E2164E367E943C1FC /* Build configuration list for PBXProject "StudyCast" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 2250484689E33A51CD60EE6B;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 2BA431C2E5814A7786ABC85F /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				2F34C4012AAA5DCE7A32F882 /* StudyCast */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		6F2BCE20448240C2E82326DE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BDC0D2C7A30EC569A70D295C /* AppModel.swift in Sources */,
+				6DEFB2AC20FE38299CBBD558 /* ContentView.swift in Sources */,
+				B74171E49FDA20AF18BA503A /* Station.swift in Sources */,
+				69AB2D5F94028AE2A3EB86C5 /* StudyCastApp.swift in Sources */,
+				F857ED2F01D541803A8065F0 /* UxPlayProcess.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		575D4D4E4FF82A133579CCCB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		7A1D0AEAA56E632D8FB8F07B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.visionone.StudyCast;
+				PRODUCT_NAME = StudyCast;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		A5BA17D1DAFB0C86D8AE870A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.visionone.StudyCast;
+				PRODUCT_NAME = StudyCast;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		DF58D9D6710A971849263D0A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		098E4E3E2164E367E943C1FC /* Build configuration list for PBXProject "StudyCast" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DF58D9D6710A971849263D0A /* Debug */,
+				575D4D4E4FF82A133579CCCB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		DC783A65478DFFC77851B746 /* Build configuration list for PBXNativeTarget "StudyCast" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7A1D0AEAA56E632D8FB8F07B /* Debug */,
+				A5BA17D1DAFB0C86D8AE870A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 4CFCD00664FC1B47EEC774DC /* Project object */;
+}
