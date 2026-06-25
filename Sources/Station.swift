@@ -17,12 +17,20 @@ final class Station: ObservableObject, Identifiable {
 
     let id = UUID()
     let index: Int
-    let preview = WindowPreviewModel()
+    let preview = StationMediaPreviewModel()
     @Published var label: String
+    @Published var selectedAudioOutputUID: String {
+        didSet {
+            guard oldValue != selectedAudioOutputUID else { return }
+            UserDefaults.standard.set(selectedAudioOutputUID, forKey: Self.audioOutputDefaultsKey(index: index))
+            applySelectedAudioOutput()
+        }
+    }
     @Published private(set) var state: State = .idle
     @Published private(set) var outputFile: URL?
 
     private let proc = UxPlayProcess()
+    private weak var audioOutputManager: AudioOutputManager?
     private struct ClipInterval {
         let start: Date
         let stop: Date
@@ -37,10 +45,15 @@ final class Station: ObservableObject, Identifiable {
     var airplayName: String { "StudyCast-\(index + 1)" }
     var basePort: Int { 35000 + index * 10 }
     var mac: String { String(format: "02:00:00:00:00:%02X", index + 1) }
+    var mediaPorts: StationMediaPorts { StationMediaPorts(stationIndex: index) }
 
-    init(index: Int, label: String) {
+    init(index: Int, label: String, audioOutputManager: AudioOutputManager) {
         self.index = index
         self.label = label
+        self.audioOutputManager = audioOutputManager
+        selectedAudioOutputUID = UserDefaults.standard.string(
+            forKey: Self.audioOutputDefaultsKey(index: index)
+        ) ?? AudioOutputDevice.systemDefaultUID
     }
 
     func startProjection(uxplayPath: String,
@@ -54,20 +67,28 @@ final class Station: ObservableObject, Identifiable {
             recordStartDate = nil
             clipIntervals = []
             outputFile = nil
+            preview.start(ports: mediaPorts, audioOutputDeviceID: resolvedSelectedAudioOutputDeviceID)
             try proc.start(uxplayPath: uxplayPath,
                            name: airplayName,
                            basePort: basePort,
                            mac: mac,
+                           mediaPorts: mediaPorts,
                            mp4Base: stagingBase)
-            if let processID = proc.processID {
-                preview.start(processID: processID, expectedTitle: airplayName)
-            }
             state = .projecting
         } catch {
             preview.stop()
             state = .error(error.localizedDescription)
             onError("\(label): 投屏接收端启动失败 — \(error.localizedDescription)")
         }
+    }
+
+    func applySelectedAudioOutput() {
+        preview.setAudioOutputDeviceID(resolvedSelectedAudioOutputDeviceID)
+    }
+
+    func isSelectedAudioOutputUnavailable(using manager: AudioOutputManager) -> Bool {
+        selectedAudioOutputUID != AudioOutputDevice.systemDefaultUID
+            && !manager.isAvailable(uid: selectedAudioOutputUID)
     }
 
     func startRecording() {
@@ -292,5 +313,16 @@ final class Station: ObservableObject, Identifiable {
         recordStartDate = nil
         clipIntervals = []
         preview.stop()
+    }
+
+    private var resolvedSelectedAudioOutputDeviceID: Int? {
+        guard selectedAudioOutputUID != AudioOutputDevice.systemDefaultUID else {
+            return 0
+        }
+        return audioOutputManager?.outputDeviceID(for: selectedAudioOutputUID)
+    }
+
+    private static func audioOutputDefaultsKey(index: Int) -> String {
+        "StudyCast.station.\(index).audioOutputUID"
     }
 }

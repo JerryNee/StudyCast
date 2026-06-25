@@ -13,12 +13,17 @@ import SwiftUI
 struct StudyCastApp: App {
     @StateObject private var model = AppModel()
 
+    init() {
+        GStreamerPreviewEngine.configureRuntimeEnvironment()
+    }
+
     var body: some Scene {
         WindowGroup("StudyCast") {
             ContentView()
                 .environmentObject(model)
                 .frame(minWidth: 860, minHeight: 580)
         }
+        .defaultSize(width: 1280, height: 820)
         .windowResizability(.contentMinSize)
     }
 }

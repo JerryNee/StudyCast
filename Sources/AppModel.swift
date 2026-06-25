@@ -18,6 +18,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var currentSessionDir: URL?
     @Published var lastError: String?
 
+    let audioOutputManager: AudioOutputManager
+
     private var currentStagingDir: URL?
 
     static let defaultUxplayPath = (NSHomeDirectory() as NSString)
@@ -31,7 +33,11 @@ final class AppModel: ObservableObject {
     }
 
     init() {
-        stations = (0..<3).map { Station(index: $0, label: "Station \($0 + 1)") }
+        let audioOutputManager = AudioOutputManager()
+        self.audioOutputManager = audioOutputManager
+        stations = (0..<3).map {
+            Station(index: $0, label: "Station \($0 + 1)", audioOutputManager: audioOutputManager)
+        }
     }
 
     func setStationCount(_ count: Int) {
@@ -41,8 +47,15 @@ final class AppModel: ObservableObject {
             stations = Array(stations.prefix(clamped))
         } else {
             for i in stations.count..<clamped {
-                stations.append(Station(index: i, label: "Station \(i + 1)"))
+                stations.append(Station(index: i, label: "Station \(i + 1)", audioOutputManager: audioOutputManager))
             }
+        }
+    }
+
+    func refreshAudioOutputDevices() {
+        audioOutputManager.refresh()
+        for station in stations {
+            station.applySelectedAudioOutput()
         }
     }
 

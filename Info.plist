@@ -29,7 +29,5 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>StudyCast runs AirPlay receivers to record Vision Pro headset views on your local network.</string>
-	<key>NSScreenCaptureUsageDescription</key>
-	<string>StudyCast captures local UxPlay receiver windows to show live headset previews.</string>
 </dict>
 </plist>

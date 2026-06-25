@@ -1,7 +1,7 @@
 //
 //  ContentView.swift
 //  Control bar (study / headset count / output / record) + a grid of station
-//  tiles. Each tile can embed a ScreenCaptureKit preview of its UxPlay window.
+//  tiles. Each tile embeds a local RTP preview from its hidden UxPlay helper.
 //
 
 import SwiftUI
@@ -10,7 +10,18 @@ import AppKit
 struct ContentView: View {
     @EnvironmentObject var model: AppModel
 
-    private let columns = [GridItem(.adaptive(minimum: 240), spacing: 16)]
+    @AppStorage("StudyCast.previewGridColumns") private var previewGridColumns = 0
+    @AppStorage("StudyCast.previewImageMode") private var previewImageModeRaw = PreviewImageMode.fill.rawValue
+    @AppStorage("StudyCast.tileDetailMode") private var tileDetailModeRaw = TileDetailMode.compact.rawValue
+    @State private var didFitWindowThisLaunch = false
+
+    private var previewImageMode: PreviewImageMode {
+        PreviewImageMode(rawValue: previewImageModeRaw) ?? .fill
+    }
+
+    private var tileDetailMode: TileDetailMode {
+        TileDetailMode(rawValue: tileDetailModeRaw) ?? .compact
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,14 +35,33 @@ struct ContentView: View {
                     .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            ScrollView {
-                LazyVGrid(columns: columns, spacing: 16) {
+            GeometryReader { proxy in
+                let metrics = PreviewGridMetrics(
+                    containerSize: proxy.size,
+                    stationCount: model.stations.count,
+                    preferredColumns: previewGridColumns,
+                    detailMode: tileDetailMode
+                )
+
+                LazyVGrid(columns: metrics.gridItems, spacing: metrics.spacing) {
                     ForEach(model.stations) { station in
-                        StationTile(station: station)
+                        StationTile(
+                            station: station,
+                            audioOutputManager: model.audioOutputManager,
+                            imageMode: previewImageMode,
+                            detailMode: tileDetailMode
+                        )
+                        .frame(height: metrics.tileHeight)
                     }
                 }
-                .padding(16)
+                .padding(metrics.padding)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             }
+        }
+        .onAppear {
+            guard !didFitWindowThisLaunch else { return }
+            didFitWindowThisLaunch = true
+            fitWindowToScreen()
         }
     }
 
@@ -64,6 +94,14 @@ struct ContentView: View {
             if model.currentSessionDir != nil {
                 Button("Show in Finder") { model.revealOutputInFinder() }
             }
+            Button {
+                model.refreshAudioOutputDevices()
+            } label: {
+                Label("Refresh Audio Devices", systemImage: "arrow.clockwise")
+            }
+            .labelStyle(.iconOnly)
+            .help("刷新音频输出设备")
+            layoutMenu
             projectionButton
             recordButton
         }
@@ -75,6 +113,38 @@ struct ContentView: View {
             Text(title).font(.caption).foregroundStyle(.secondary)
             content()
         }
+    }
+
+    private var layoutMenu: some View {
+        Menu {
+            Button {
+                fitWindowToScreen()
+            } label: {
+                Label("Fit Window to Screen", systemImage: "arrow.up.left.and.arrow.down.right")
+            }
+
+            Divider()
+
+            Picker("Columns", selection: $previewGridColumns) {
+                Text("Auto").tag(0)
+                ForEach(1...8, id: \.self) { value in
+                    Text("\(value)").tag(value)
+                }
+            }
+
+            Picker("Image", selection: $previewImageModeRaw) {
+                Text("Fill").tag(PreviewImageMode.fill.rawValue)
+                Text("Fit").tag(PreviewImageMode.fit.rawValue)
+            }
+
+            Picker("Tiles", selection: $tileDetailModeRaw) {
+                Text("Compact").tag(TileDetailMode.compact.rawValue)
+                Text("Expanded").tag(TileDetailMode.expanded.rawValue)
+            }
+        } label: {
+            Label("Layout", systemImage: "rectangle.grid.2x2")
+        }
+        .help("布局")
     }
 
     private var projectionButton: some View {
@@ -121,20 +191,185 @@ struct ContentView: View {
             model.outputDirectory = url
         }
     }
+
+    private func fitWindowToScreen() {
+        DispatchQueue.main.async {
+            guard let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.title == "StudyCast" }),
+                  let screen = window.screen ?? NSScreen.main else {
+                return
+            }
+
+            let visibleFrame = screen.visibleFrame
+            let horizontalInset = max(36, visibleFrame.width * 0.04)
+            let verticalInset = max(36, visibleFrame.height * 0.05)
+            let targetWidth = min(visibleFrame.width - horizontalInset * 2, max(1180, visibleFrame.width * 0.88))
+            let targetHeight = min(visibleFrame.height - verticalInset * 2, max(760, visibleFrame.height * 0.84))
+            let targetFrame = NSRect(
+                x: visibleFrame.midX - targetWidth / 2,
+                y: visibleFrame.midY - targetHeight / 2,
+                width: targetWidth,
+                height: targetHeight
+            )
+
+            window.setFrame(targetFrame, display: true, animate: false)
+        }
+    }
 }
 
-struct StationTile: View {
-    @ObservedObject var station: Station
-    @ObservedObject private var preview: WindowPreviewModel
+private enum PreviewImageMode: String {
+    case fill
+    case fit
 
-    init(station: Station) {
+    var contentMode: ContentMode {
+        switch self {
+        case .fill: return .fill
+        case .fit: return .fit
+        }
+    }
+}
+
+private enum TileDetailMode: String {
+    case compact
+    case expanded
+}
+
+private struct PreviewGridMetrics {
+    let columns: Int
+    let tileHeight: CGFloat
+    let spacing: CGFloat = 12
+    let padding: CGFloat = 12
+
+    var gridItems: [GridItem] {
+        Array(repeating: GridItem(.flexible(minimum: 0), spacing: spacing), count: columns)
+    }
+
+    init(containerSize: CGSize, stationCount: Int, preferredColumns: Int, detailMode: TileDetailMode) {
+        let count = max(1, stationCount)
+        let maxColumns = min(8, count)
+        let availableWidth = max(1, containerSize.width - padding * 2)
+        let availableHeight = max(1, containerSize.height - padding * 2)
+
+        if preferredColumns > 0 {
+            columns = min(max(1, preferredColumns), maxColumns)
+        } else {
+            columns = Self.bestColumns(
+                count: count,
+                maxColumns: maxColumns,
+                availableWidth: availableWidth,
+                availableHeight: availableHeight,
+                spacing: spacing,
+                detailMode: detailMode
+            )
+        }
+
+        let rows = Int(ceil(Double(count) / Double(columns)))
+        let rowSpacing = CGFloat(max(0, rows - 1)) * spacing
+        tileHeight = max(120, floor((availableHeight - rowSpacing) / CGFloat(rows)))
+    }
+
+    private static func bestColumns(
+        count: Int,
+        maxColumns: Int,
+        availableWidth: CGFloat,
+        availableHeight: CGFloat,
+        spacing: CGFloat,
+        detailMode: TileDetailMode
+    ) -> Int {
+        let targetAspect: CGFloat = detailMode == .compact ? 16 / 9 : 1.35
+        var bestColumns = 1
+        var bestScore: CGFloat = -.greatestFiniteMagnitude
+
+        for candidate in 1...maxColumns {
+            let rows = Int(ceil(Double(count) / Double(candidate)))
+            let cellWidth = (availableWidth - CGFloat(candidate - 1) * spacing) / CGFloat(candidate)
+            let cellHeight = (availableHeight - CGFloat(rows - 1) * spacing) / CGFloat(rows)
+            let fittedWidth = min(cellWidth, cellHeight * targetAspect)
+            let fittedHeight = min(cellHeight, cellWidth / targetAspect)
+            let filledArea = fittedWidth * fittedHeight
+            let leftoverPenalty = (cellWidth * cellHeight - filledArea) * 0.08
+            let emptyCellPenalty = CGFloat(candidate * rows - count) * filledArea * 0.03
+            let score = filledArea - leftoverPenalty - emptyCellPenalty
+
+            if score > bestScore {
+                bestScore = score
+                bestColumns = candidate
+            }
+        }
+
+        return bestColumns
+    }
+}
+
+private struct StationTile: View {
+    @ObservedObject var station: Station
+    @ObservedObject private var preview: StationMediaPreviewModel
+    @ObservedObject var audioOutputManager: AudioOutputManager
+    let imageMode: PreviewImageMode
+    let detailMode: TileDetailMode
+
+    init(
+        station: Station,
+        audioOutputManager: AudioOutputManager,
+        imageMode: PreviewImageMode,
+        detailMode: TileDetailMode
+    ) {
         self.station = station
         self.preview = station.preview
+        self.audioOutputManager = audioOutputManager
+        self.imageMode = imageMode
+        self.detailMode = detailMode
     }
 
     var body: some View {
+        Group {
+            switch detailMode {
+            case .compact:
+                compactBody
+            case .expanded:
+                expandedBody
+            }
+        }
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color(NSColor.controlBackgroundColor)))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var compactBody: some View {
+        ZStack {
+            previewPane
+
+            VStack(spacing: 0) {
+                overlayBar {
+                    HStack(spacing: 8) {
+                        Text(station.label)
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Circle().fill(dotColor).frame(width: 8, height: 8)
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                overlayBar {
+                    HStack(spacing: 8) {
+                        Text(station.airplayName)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.white.opacity(0.88))
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        compactAudioControls
+                    }
+                }
+            }
+            .padding(8)
+        }
+    }
+
+    private var expandedBody: some View {
         VStack(alignment: .leading, spacing: 8) {
             previewPane
+                .layoutPriority(1)
 
             TextField("Label", text: $station.label)
                 .textFieldStyle(.roundedBorder)
@@ -145,6 +380,7 @@ struct StationTile: View {
                 Spacer()
                 Circle().fill(dotColor).frame(width: 8, height: 8)
             }
+            audioControls
             if let outputFile = station.outputFile {
                 Text(outputFile.lastPathComponent)
                     .font(.caption2.monospaced())
@@ -153,17 +389,23 @@ struct StationTile: View {
                     .truncationMode(.middle)
             }
         }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(NSColor.controlBackgroundColor)))
+        .padding(8)
+    }
+
+    private func overlayBar<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(Color.black.opacity(0.38), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private var previewPane: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 8).fill(Color.black.opacity(0.9))
+            Color.black.opacity(0.92)
             if let image = preview.image {
                 Image(decorative: image, scale: 1, orientation: .up)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
+                    .aspectRatio(contentMode: imageMode.contentMode)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
             } else {
@@ -180,9 +422,101 @@ struct StationTile: View {
                 .padding(8)
             }
         }
-        .aspectRatio(16 / 9, contentMode: .fit)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var audioControls: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Button {
+                    preview.isMuted.toggle()
+                } label: {
+                    Image(systemName: preview.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                        .frame(width: 18)
+                }
+                .buttonStyle(.borderless)
+                .help(preview.isMuted ? "取消静音" : "静音")
+
+                Slider(value: $preview.volume, in: 0...1)
+                    .disabled(preview.isMuted)
+            }
+
+            HStack(spacing: 6) {
+                Image(systemName: "speaker.wave.2")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 18)
+                Text("监听输出")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Picker("Audio Output", selection: $station.selectedAudioOutputUID) {
+                    ForEach(audioOutputManager.pickerDevices(including: station.selectedAudioOutputUID)) { device in
+                        Text(device.name).tag(device.uid)
+                    }
+                }
+                .labelsHidden()
+            }
+
+            if let audioOutputStatusMessage {
+                Label(audioOutputStatusMessage, systemImage: "exclamationmark.triangle")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
+        .controlSize(.small)
+    }
+
+    private var compactAudioControls: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) {
+                audioOutputMenu
+                muteButton
+                Slider(value: $preview.volume, in: 0...1)
+                    .disabled(preview.isMuted)
+                    .frame(width: 96)
+            }
+            HStack(spacing: 6) {
+                audioOutputMenu
+                muteButton
+            }
+            audioOutputMenu
+        }
+        .controlSize(.small)
+    }
+
+    private var audioOutputMenu: some View {
+        Menu {
+            Picker("监听输出", selection: $station.selectedAudioOutputUID) {
+                ForEach(audioOutputManager.pickerDevices(including: station.selectedAudioOutputUID)) { device in
+                    Text(device.name).tag(device.uid)
+                }
+            }
+            Divider()
+            Button {
+                audioOutputManager.refresh()
+                station.applySelectedAudioOutput()
+            } label: {
+                Label("Refresh Audio Devices", systemImage: "arrow.clockwise")
+            }
+        } label: {
+            Image(systemName: audioOutputStatusMessage == nil ? "speaker.wave.2.fill" : "exclamationmark.triangle.fill")
+                .frame(width: 18)
+        }
+        .buttonStyle(.borderless)
+        .help(audioOutputStatusMessage ?? "选择监听输出")
+    }
+
+    private var muteButton: some View {
+        Button {
+            preview.isMuted.toggle()
+        } label: {
+            Image(systemName: preview.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                .frame(width: 18)
+        }
+        .buttonStyle(.borderless)
+        .help(preview.isMuted ? "取消静音" : "静音")
     }
 
     private var icon: String {
@@ -211,6 +545,13 @@ struct StationTile: View {
         default:
             return statusText
         }
+    }
+
+    private var audioOutputStatusMessage: String? {
+        if station.isSelectedAudioOutputUnavailable(using: audioOutputManager) {
+            return "输出设备不可用"
+        }
+        return preview.audioOutputStatusText
     }
 
     private var dotColor: Color {

@@ -15,13 +15,13 @@ targets:
     platform: macOS
     sources:
       - Sources
+      - Resources
     info:
       path: Info.plist
       properties:
         CFBundleDisplayName: StudyCast
         LSMinimumSystemVersion: "14.0"
         NSLocalNetworkUsageDescription: "StudyCast runs AirPlay receivers to record Vision Pro headset views on your local network."
-        NSScreenCaptureUsageDescription: "StudyCast captures local UxPlay receiver windows to show live headset previews."
         NSBonjourServices:
           - _airplay._tcp
           - _raop._tcp
@@ -29,3 +29,34 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.visionone.StudyCast
         PRODUCT_NAME: StudyCast
+        SWIFT_OBJC_BRIDGING_HEADER: Sources/StudyCast-Bridging-Header.h
+        HEADER_SEARCH_PATHS:
+          - $(inherited)
+          - /opt/homebrew/include
+          - /opt/homebrew/include/gstreamer-1.0
+          - /opt/homebrew/include/glib-2.0
+          - /opt/homebrew/lib/glib-2.0/include
+          - /opt/homebrew/opt/gettext/include
+          - /Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk/usr/include/ffi
+        LIBRARY_SEARCH_PATHS:
+          - $(inherited)
+          - /opt/homebrew/opt/gstreamer/lib
+          - /opt/homebrew/opt/glib/lib
+          - /opt/homebrew/opt/gettext/lib
+        LD_RUNPATH_SEARCH_PATHS:
+          - $(inherited)
+          - "@executable_path/../Frameworks/GStreamer/lib"
+        OTHER_LDFLAGS:
+          - $(inherited)
+          - -lgstapp-1.0
+          - -lgstvideo-1.0
+          - -lgstaudio-1.0
+          - -lgstbase-1.0
+          - -lgstreamer-1.0
+          - -lgobject-2.0
+          - -lglib-2.0
+          - -lintl
+    postBuildScripts:
+      - name: Bundle UxPlay and GStreamer
+        script: bash scripts/bundle_runtime.sh
+        basedOnDependencyAnalysis: false
