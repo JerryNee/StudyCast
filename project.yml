@@ -21,7 +21,7 @@ targets:
       properties:
         CFBundleDisplayName: StudyCast
         LSMinimumSystemVersion: "14.0"
-        NSLocalNetworkUsageDescription: "StudyCast runs AirPlay receivers to record Vision Pro headset views on your local network."
+        NSLocalNetworkUsageDescription: "StudyCast runs AirPlay receivers to record AirPlay-capable device streams on your local network."
         NSBonjourServices:
           - _airplay._tcp
           - _raop._tcp

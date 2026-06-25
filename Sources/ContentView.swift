@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  Control bar (study / headset count / output / record) + a grid of station
+//  Control bar (study / device count / output / record) + a grid of station
 //  tiles. Each tile embeds a local RTP preview from its hidden UxPlay helper.
 //
 
@@ -73,7 +73,7 @@ struct ContentView: View {
                     .frame(width: 150)
                     .disabled(model.isProjecting)
             }
-            field("Headsets") {
+            field("Devices") {
                 Stepper(value: Binding(
                     get: { model.stations.count },
                     set: { model.setStationCount($0) }

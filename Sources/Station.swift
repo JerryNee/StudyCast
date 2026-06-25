@@ -1,6 +1,6 @@
 //
 //  Station.swift
-//  One capture station = one headset = one UxPlay receiver.
+//  One capture station = one AirPlay-capable device = one UxPlay receiver.
 //
 
 import Foundation

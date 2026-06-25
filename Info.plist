@@ -28,6 +28,6 @@
 		<string>_raop._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>StudyCast runs AirPlay receivers to record Vision Pro headset views on your local network.</string>
+	<string>StudyCast runs AirPlay receivers to record AirPlay-capable device streams on your local network.</string>
 </dict>
 </plist>
