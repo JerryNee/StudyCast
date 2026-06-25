@@ -1,9 +1,7 @@
 //
 //  ContentView.swift
 //  Control bar (study / headset count / output / record) + a grid of station
-//  tiles. Live video preview is added on top of these tiles in the next step
-//  (ScreenCaptureKit); for now each tile shows status + the name to pick on the
-//  headset.
+//  tiles. Each tile can embed a ScreenCaptureKit preview of its UxPlay window.
 //
 
 import SwiftUI
@@ -127,21 +125,16 @@ struct ContentView: View {
 
 struct StationTile: View {
     @ObservedObject var station: Station
+    @ObservedObject private var preview: WindowPreviewModel
+
+    init(station: Station) {
+        self.station = station
+        self.preview = station.preview
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8).fill(Color.black.opacity(0.85))
-                VStack(spacing: 6) {
-                    Image(systemName: icon)
-                        .font(.system(size: 26))
-                        .foregroundStyle(.white.opacity(0.85))
-                    Text(statusText)
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.85))
-                }
-            }
-            .frame(height: 150)
+            previewPane
 
             TextField("Label", text: $station.label)
                 .textFieldStyle(.roundedBorder)
@@ -164,6 +157,34 @@ struct StationTile: View {
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(NSColor.controlBackgroundColor)))
     }
 
+    private var previewPane: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8).fill(Color.black.opacity(0.9))
+            if let image = preview.image {
+                Image(decorative: image, scale: 1, orientation: .up)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            } else {
+                VStack(spacing: 6) {
+                    Image(systemName: icon)
+                        .font(.system(size: 26))
+                        .foregroundStyle(.white.opacity(0.85))
+                    Text(previewStatusText)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(8)
+            }
+        }
+        .aspectRatio(16 / 9, contentMode: .fit)
+        .frame(maxWidth: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
     private var icon: String {
         switch station.state {
         case .recording: return "record.circle"
@@ -180,6 +201,15 @@ struct StationTile: View {
         case .recording:    return "录制中"
         case .stopped:      return "已停止"
         case .error(let m): return m
+        }
+    }
+
+    private var previewStatusText: String {
+        switch station.state {
+        case .projecting, .recording:
+            return preview.statusText
+        default:
+            return statusText
         }
     }
 

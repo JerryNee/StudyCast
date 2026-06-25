@@ -17,6 +17,7 @@ final class Station: ObservableObject, Identifiable {
 
     let id = UUID()
     let index: Int
+    let preview = WindowPreviewModel()
     @Published var label: String
     @Published private(set) var state: State = .idle
     @Published private(set) var outputFile: URL?
@@ -58,8 +59,12 @@ final class Station: ObservableObject, Identifiable {
                            basePort: basePort,
                            mac: mac,
                            mp4Base: stagingBase)
+            if let processID = proc.processID {
+                preview.start(processID: processID, expectedTitle: airplayName)
+            }
             state = .projecting
         } catch {
+            preview.stop()
             state = .error(error.localizedDescription)
             onError("\(label): 投屏接收端启动失败 — \(error.localizedDescription)")
         }
@@ -82,6 +87,7 @@ final class Station: ObservableObject, Identifiable {
         if recordStartDate != nil {
             stopRecording()
         }
+        preview.stop()
         await proc.stopProjection()
     }
 
@@ -285,5 +291,6 @@ final class Station: ObservableObject, Identifiable {
         errorHandler = nil
         recordStartDate = nil
         clipIntervals = []
+        preview.stop()
     }
 }

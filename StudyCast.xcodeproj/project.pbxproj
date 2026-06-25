@@ -11,6 +11,7 @@
 		6DEFB2AC20FE38299CBBD558 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8A0265C9F87018258AC4C80 /* ContentView.swift */; };
 		B74171E49FDA20AF18BA503A /* Station.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4BE570131FD02FE1729A32D /* Station.swift */; };
 		BDC0D2C7A30EC569A70D295C /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6327135392501F05CA37C671 /* AppModel.swift */; };
+		C0D4E7B05B9A4F0E8A1D3201 /* WindowPreviewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D4E7AF5B9A4F0E8A1D3201 /* WindowPreviewModel.swift */; };
 		F857ED2F01D541803A8065F0 /* UxPlayProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0ACCFEB978BA874082BC10F /* UxPlayProcess.swift */; };
 /* End PBXBuildFile section */
 
@@ -18,6 +19,7 @@
 		0FDAFC80A1BD2C77CF5E0390 /* StudyCast.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StudyCast.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6327135392501F05CA37C671 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		97A104FA6D3E1C259AEA6A9F /* StudyCastApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyCastApp.swift; sourceTree = "<group>"; };
+		C0D4E7AF5B9A4F0E8A1D3201 /* WindowPreviewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowPreviewModel.swift; sourceTree = "<group>"; };
 		E8A0265C9F87018258AC4C80 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		F0ACCFEB978BA874082BC10F /* UxPlayProcess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UxPlayProcess.swift; sourceTree = "<group>"; };
 		F4BE570131FD02FE1729A32D /* Station.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Station.swift; sourceTree = "<group>"; };
@@ -48,6 +50,7 @@
 				F4BE570131FD02FE1729A32D /* Station.swift */,
 				97A104FA6D3E1C259AEA6A9F /* StudyCastApp.swift */,
 				F0ACCFEB978BA874082BC10F /* UxPlayProcess.swift */,
+				C0D4E7AF5B9A4F0E8A1D3201 /* WindowPreviewModel.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -112,6 +115,7 @@
 				B74171E49FDA20AF18BA503A /* Station.swift in Sources */,
 				69AB2D5F94028AE2A3EB86C5 /* StudyCastApp.swift in Sources */,
 				F857ED2F01D541803A8065F0 /* UxPlayProcess.swift in Sources */,
+				C0D4E7B05B9A4F0E8A1D3201 /* WindowPreviewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

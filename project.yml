@@ -21,6 +21,7 @@ targets:
         CFBundleDisplayName: StudyCast
         LSMinimumSystemVersion: "14.0"
         NSLocalNetworkUsageDescription: "StudyCast runs AirPlay receivers to record Vision Pro headset views on your local network."
+        NSScreenCaptureUsageDescription: "StudyCast captures local UxPlay receiver windows to show live headset previews."
         NSBonjourServices:
           - _airplay._tcp
           - _raop._tcp

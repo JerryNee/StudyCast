@@ -17,6 +17,10 @@ final class UxPlayProcess {
         process?.isRunning == true
     }
 
+    var processID: pid_t? {
+        process?.processIdentifier
+    }
+
     func start(uxplayPath: String,
                name: String,
                basePort: Int,
