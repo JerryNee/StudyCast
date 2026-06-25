@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-: "${RELEASE_VERSION:?Set RELEASE_VERSION, for example 0.1.0-beta.1}"
+: "${RELEASE_VERSION:?Set RELEASE_VERSION, for example 0.1.0-beta.2}"
 : "${UXPLAY_SOURCE_DIR:?Set UXPLAY_SOURCE_DIR to the exact UxPlay source tree used for this release}"
 : "${UXPLAY_COMMIT:?Set UXPLAY_COMMIT to the exact UxPlay commit used for this release}"
 

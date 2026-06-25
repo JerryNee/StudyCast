@@ -40,11 +40,11 @@ xcodebuild -project StudyCast.xcodeproj -scheme StudyCast -configuration Debug -
 
 ### Option 2: Unsigned preview DMG
 
-For users who want the easiest install path today, GitHub Releases may include `StudyCast-0.1.0-beta.1-arm64-unsigned.dmg`.
+For users who want the easiest install path today, GitHub Releases may include `StudyCast-0.1.0-beta.2-arm64-unsigned.dmg`.
 
 This preview DMG is ad-hoc signed but not Apple Developer ID signed or notarized. StudyCast does not yet have a paid Apple Developer Program account, so macOS Gatekeeper will ask you to approve it manually in **System Settings > Privacy & Security** after the first launch attempt.
 
-1. Download `StudyCast-0.1.0-beta.1-arm64-unsigned.dmg`.
+1. Download `StudyCast-0.1.0-beta.2-arm64-unsigned.dmg`.
 2. Open the DMG and drag StudyCast into Applications.
 3. Launch StudyCast once. If macOS blocks it, open **System Settings > Privacy & Security** and choose **Open Anyway**.
 4. Relaunch StudyCast and allow Local Network access.
@@ -57,7 +57,7 @@ This preview DMG is ad-hoc signed but not Apple Developer ID signed or notarized
 Unsigned preview DMGs are prepared locally with:
 
 ```sh
-export RELEASE_VERSION=0.1.0-beta.1
+export RELEASE_VERSION=0.1.0-beta.2
 export UXPLAY_SOURCE_DIR=/path/to/UxPlay
 export UXPLAY_COMMIT=<exact-commit>
 scripts/package_unsigned_preview.sh
@@ -66,7 +66,7 @@ scripts/package_unsigned_preview.sh
 Future signed and notarized DMGs can be prepared with:
 
 ```sh
-export RELEASE_VERSION=0.1.0-beta.1
+export RELEASE_VERSION=0.1.0-beta.2
 export DEVELOPER_ID_APPLICATION='Developer ID Application: Your Name (TEAMID)'
 export NOTARYTOOL_PROFILE=studycast-notary
 export UXPLAY_SOURCE_DIR=/path/to/UxPlay

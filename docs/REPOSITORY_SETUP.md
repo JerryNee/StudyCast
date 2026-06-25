@@ -8,7 +8,7 @@ macOS multi-device AirPlay capture desk for research sessions, teaching labs, an
 
 ## Website
 
-Use the latest GitHub Release URL once `v0.1.0-beta.1` is published.
+Use the latest GitHub Release URL once `v0.1.0-beta.2` is published.
 
 ## Topics
 
@@ -33,8 +33,8 @@ Upload `docs/assets/social-preview.png` in repository settings under **Social pr
 
 The first public release should include:
 
-- `StudyCast-0.1.0-beta.1-arm64-unsigned.dmg`
-- `StudyCast-0.1.0-beta.1-source.tar.gz`
+- `StudyCast-0.1.0-beta.2-arm64-unsigned.dmg`
+- `StudyCast-0.1.0-beta.2-source.tar.gz`
 - `UxPlay-<commit>-source.tar.gz`
 - `ThirdPartyNotices.md`
 - `SourceOffer.md`

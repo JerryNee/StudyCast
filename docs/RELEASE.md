@@ -5,15 +5,15 @@ StudyCast release builds are created locally. The current public beta can ship a
 ## Version Policy
 
 - App marketing version: `0.1.0`.
-- First public tag: `v0.1.0-beta.1`.
-- Current preview binary asset: `StudyCast-0.1.0-beta.1-arm64-unsigned.dmg`.
-- Future notarized binary asset: `StudyCast-0.1.0-beta.1-arm64.dmg`.
+- First public tag: `v0.1.0-beta.2`.
+- Current preview binary asset: `StudyCast-0.1.0-beta.2-arm64-unsigned.dmg`.
+- Future notarized binary asset: `StudyCast-0.1.0-beta.2-arm64.dmg`.
 - Binary support target: Apple Silicon, macOS 26 or newer.
 
 ## Required Environment for Unsigned Preview
 
 ```sh
-export RELEASE_VERSION=0.1.0-beta.1
+export RELEASE_VERSION=0.1.0-beta.2
 export UXPLAY_SOURCE_DIR=/path/to/UxPlay
 export UXPLAY_COMMIT=<exact-commit>
 ```
@@ -29,7 +29,7 @@ This creates `StudyCast-${RELEASE_VERSION}-arm64-unsigned.dmg`. It is ad-hoc sig
 ## Required Environment for Developer ID Release
 
 ```sh
-export RELEASE_VERSION=0.1.0-beta.1
+export RELEASE_VERSION=0.1.0-beta.2
 export DEVELOPER_ID_APPLICATION='Developer ID Application: Your Name (TEAMID)'
 export NOTARYTOOL_PROFILE=studycast-notary
 export UXPLAY_SOURCE_DIR=/path/to/UxPlay
