@@ -32,6 +32,7 @@ EXPORT_DIR="${BUILD_ROOT}/export"
 STAGING_DIR="${BUILD_ROOT}/dmg-staging"
 ASSETS_DIR="${BUILD_ROOT}/assets"
 APP_PATH="${EXPORT_DIR}/StudyCast.app"
+ENTITLEMENTS_PATH="${REPO_ROOT}/Resources/StudyCast.entitlements"
 DMG_PATH="${ASSETS_DIR}/StudyCast-${RELEASE_VERSION}-${DMG_SUFFIX}.dmg"
 SOURCE_TARBALL="${ASSETS_DIR}/StudyCast-${RELEASE_VERSION}-source.tar.gz"
 UXPLAY_TARBALL="${ASSETS_DIR}/UxPlay-${UXPLAY_COMMIT}-source.tar.gz"
@@ -66,9 +67,9 @@ SIGN_APP_BUNDLE=0 \
   bash "${SCRIPT_DIR}/bundle_runtime.sh"
 
 if [[ "${SIGNING_MODE}" == "developer-id" ]]; then
-  codesign --force --timestamp --options runtime --deep --sign "${DEVELOPER_ID_APPLICATION}" "${APP_PATH}"
+  codesign --force --timestamp --options runtime --entitlements "${ENTITLEMENTS_PATH}" --deep --sign "${DEVELOPER_ID_APPLICATION}" "${APP_PATH}"
 else
-  codesign --force --timestamp=none --options runtime --deep --sign - "${APP_PATH}"
+  codesign --force --timestamp=none --options runtime --entitlements "${ENTITLEMENTS_PATH}" --deep --sign - "${APP_PATH}"
 fi
 codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
 
