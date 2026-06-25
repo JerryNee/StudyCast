@@ -482,30 +482,42 @@ private struct StationTile: View {
     }
 
     private var previewPane: some View {
-        ZStack {
-            Color.black.opacity(0.92)
-            if let image = preview.image {
-                Image(decorative: image, scale: 1, orientation: .up)
-                    .resizable()
-                    .aspectRatio(contentMode: imageMode.contentMode)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-            } else {
-                VStack(spacing: 6) {
-                    Image(systemName: icon)
-                        .font(.system(size: 26))
-                        .foregroundStyle(.white.opacity(0.85))
-                    Text(previewStatusText)
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.85))
-                        .lineLimit(2)
-                        .multilineTextAlignment(.center)
+        GeometryReader { proxy in
+            let size = CGSize(width: max(1, proxy.size.width), height: max(1, proxy.size.height))
+
+            ZStack {
+                Color.black.opacity(0.92)
+                if let image = preview.image {
+                    previewImage(image, in: size)
+                } else {
+                    VStack(spacing: 6) {
+                        Image(systemName: icon)
+                            .font(.system(size: 26))
+                            .foregroundStyle(.white.opacity(0.85))
+                        Text(previewStatusText)
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.85))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(8)
+                    .frame(width: size.width, height: size.height)
                 }
-                .padding(8)
             }
+            .frame(width: size.width, height: size.height)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipped()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipped()
+    }
+
+    private func previewImage(_ image: CGImage, in size: CGSize) -> some View {
+        Image(decorative: image, scale: 1, orientation: .up)
+            .resizable()
+            .aspectRatio(contentMode: imageMode.contentMode)
+            .frame(width: size.width, height: size.height)
+            .clipped()
     }
 
     private var audioControls: some View {
