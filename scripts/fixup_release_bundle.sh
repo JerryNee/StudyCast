@@ -3,6 +3,7 @@ set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
   echo "usage: $0 /path/to/StudyCast.app" >&2
+  echo "required for release: UXPLAY_SOURCE_DIR, UXPLAY_COMMIT" >&2
   exit 64
 fi
 

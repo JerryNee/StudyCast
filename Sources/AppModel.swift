@@ -22,8 +22,8 @@ final class AppModel: ObservableObject {
 
     private var currentStagingDir: URL?
 
-    static let defaultUxplayPath = (NSHomeDirectory() as NSString)
-        .appendingPathComponent("Desktop/Vision Pro/LPVT/UxPlay/uxplay")
+    static let defaultUxplayPath = ProcessInfo.processInfo.environment["UXPLAY_PATH"]
+        ?? "/opt/homebrew/bin/uxplay"
 
     static var defaultOutputDirectory: URL {
         let movies = FileManager.default
@@ -63,8 +63,12 @@ final class AppModel: ObservableObject {
         guard !isProjecting else { return }
         lastError = nil
 
-        guard FileManager.default.isExecutableFile(atPath: uxplayPath) else {
-            lastError = "找不到可执行的 uxplay:\n\(uxplayPath)"
+        guard UxPlayProcess.canResolveUxPlay(developmentPath: uxplayPath) else {
+            lastError = """
+            找不到可执行的 uxplay。
+            Release builds expect StudyCast.app/Contents/Helpers/uxplay.
+            Source builds can set UXPLAY_PATH or install uxplay at /opt/homebrew/bin/uxplay.
+            """
             return
         }
 

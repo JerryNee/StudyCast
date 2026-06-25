@@ -198,9 +198,12 @@ final class Station: ObservableObject, Identifiable {
     }
 
     private func runFFmpegTrim(input: URL, output: URL, offset: TimeInterval, duration: TimeInterval) throws {
-        let ffmpeg = "/opt/homebrew/bin/ffmpeg"
-        guard FileManager.default.isExecutableFile(atPath: ffmpeg) else {
-            throw StudyCastError("找不到 ffmpeg: \(ffmpeg)")
+        guard let ffmpeg = RuntimePaths.executable(
+            bundledName: "ffmpeg",
+            environmentKey: "FFMPEG_PATH",
+            fallbackNames: ["ffmpeg"]
+        ) else {
+            throw StudyCastError("找不到 ffmpeg。Release builds expect bundled ffmpeg; source builds can set FFMPEG_PATH.")
         }
 
         let start = String(format: "%.3f", offset)
@@ -208,7 +211,8 @@ final class Station: ObservableObject, Identifiable {
         let audioHasPackets = hasAudioPackets(input: input)
 
         let p = Process()
-        p.executableURL = URL(fileURLWithPath: ffmpeg)
+        p.executableURL = ffmpeg
+        p.environment = processEnvironment()
 
         if audioHasPackets {
             p.arguments = [
@@ -256,13 +260,17 @@ final class Station: ObservableObject, Identifiable {
     }
 
     private func hasAudioPackets(input: URL) -> Bool {
-        let ffprobe = "/opt/homebrew/bin/ffprobe"
-        guard FileManager.default.isExecutableFile(atPath: ffprobe) else {
+        guard let ffprobe = RuntimePaths.executable(
+            bundledName: "ffprobe",
+            environmentKey: "FFPROBE_PATH",
+            fallbackNames: ["ffprobe"]
+        ) else {
             return false
         }
 
         let p = Process()
-        p.executableURL = URL(fileURLWithPath: ffprobe)
+        p.executableURL = ffprobe
+        p.environment = processEnvironment()
         p.arguments = [
             "-v", "error",
             "-count_packets",
@@ -304,6 +312,12 @@ final class Station: ObservableObject, Identifiable {
             try fm.removeItem(at: finalLog)
         }
         try fm.moveItem(at: stagingLog, to: finalLog)
+    }
+
+    private func processEnvironment() -> [String: String] {
+        var env = ProcessInfo.processInfo.environment
+        env["PATH"] = RuntimePaths.pathEnvironment()
+        return env
     }
 
     private func clearSessionState() {

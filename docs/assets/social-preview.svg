@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1280" y2="640" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="0.62" stop-color="#164e63"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#020617" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <g transform="translate(78 84)">
+    <text x="0" y="86" font-family="Inter, SF Pro Display, -apple-system, BlinkMacSystemFont, sans-serif" font-size="82" font-weight="800" fill="#f8fafc">StudyCast</text>
+    <text x="2" y="144" font-family="Inter, SF Pro Text, -apple-system, BlinkMacSystemFont, sans-serif" font-size="31" font-weight="500" fill="#cffafe">Multi-device AirPlay capture for research, teaching, and demos.</text>
+    <g transform="translate(4 212)">
+      <rect x="0" y="0" width="178" height="42" rx="21" fill="#f8fafc" opacity="0.94"/>
+      <text x="22" y="28" font-family="Inter, SF Pro Text, -apple-system, BlinkMacSystemFont, sans-serif" font-size="19" font-weight="700" fill="#0f172a">macOS beta</text>
+      <rect x="194" y="0" width="194" height="42" rx="21" fill="#22d3ee" opacity="0.9"/>
+      <text x="216" y="28" font-family="Inter, SF Pro Text, -apple-system, BlinkMacSystemFont, sans-serif" font-size="19" font-weight="700" fill="#083344">SwiftUI + GStreamer</text>
+    </g>
+  </g>
+  <g transform="translate(704 88)" filter="url(#shadow)">
+    <rect x="0" y="0" width="486" height="404" rx="34" fill="#f8fafc"/>
+    <rect x="0" y="0" width="486" height="54" rx="34" fill="#e2e8f0"/>
+    <circle cx="34" cy="27" r="8" fill="#f43f5e"/>
+    <circle cx="60" cy="27" r="8" fill="#f59e0b"/>
+    <circle cx="86" cy="27" r="8" fill="#22c55e"/>
+    <g transform="translate(28 82)">
+      <rect x="0" y="0" width="198" height="124" rx="18" fill="#0f172a"/>
+      <rect x="232" y="0" width="198" height="124" rx="18" fill="#0f172a"/>
+      <rect x="0" y="158" width="198" height="124" rx="18" fill="#0f172a"/>
+      <rect x="232" y="158" width="198" height="124" rx="18" fill="#0f172a"/>
+      <circle cx="99" cy="62" r="22" fill="#22d3ee"/>
+      <circle cx="331" cy="62" r="22" fill="#f59e0b"/>
+      <circle cx="99" cy="220" r="22" fill="#f43f5e"/>
+      <circle cx="331" cy="220" r="22" fill="#84cc16"/>
+      <path d="M58 96h82M290 96h82M58 254h82M290 254h82" stroke="#cbd5e1" stroke-width="10" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>

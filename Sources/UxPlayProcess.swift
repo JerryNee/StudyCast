@@ -40,7 +40,7 @@ final class UxPlayProcess {
         ]
 
         var env = ProcessInfo.processInfo.environment
-        env["PATH"] = "/opt/homebrew/bin:" + (env["PATH"] ?? "/usr/bin:/bin")
+        env["PATH"] = RuntimePaths.pathEnvironment()
         Self.configureGStreamerEnvironment(&env)
         p.environment = env
 
@@ -69,22 +69,21 @@ final class UxPlayProcess {
         process = nil
     }
 
+    static func canResolveUxPlay(developmentPath: String) -> Bool {
+        (try? resolveUxPlayURL(developmentPath: developmentPath)) != nil
+    }
+
     private static func resolveUxPlayURL(developmentPath: String) throws -> URL {
-        let bundled = Bundle.main.bundleURL
-            .appendingPathComponent("Contents", isDirectory: true)
-            .appendingPathComponent("Helpers", isDirectory: true)
-            .appendingPathComponent("uxplay")
-        if FileManager.default.isExecutableFile(atPath: bundled.path) {
-            return bundled
+        if let url = RuntimePaths.executable(
+            bundledName: "uxplay",
+            environmentKey: "UXPLAY_PATH",
+            developmentPath: developmentPath,
+            fallbackNames: ["uxplay"]
+        ) {
+            return url
         }
 
-        #if DEBUG
-        if FileManager.default.isExecutableFile(atPath: developmentPath) {
-            return URL(fileURLWithPath: developmentPath)
-        }
-        #endif
-
-        throw StudyCastError("找不到 bundled uxplay helper: \(bundled.path)")
+        throw StudyCastError("找不到 uxplay helper。请安装 release 包或设置 UXPLAY_PATH。")
     }
 
     private static func configureGStreamerEnvironment(_ env: inout [String: String]) {

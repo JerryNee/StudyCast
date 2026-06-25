@@ -4,3 +4,9 @@ build/
 DerivedData/
 *.xcuserstate
 *.xcuserdata/
+*.dmg
+*.xcarchive
+*.app
+*.mp4
+*.mov
+*.uxplay.log

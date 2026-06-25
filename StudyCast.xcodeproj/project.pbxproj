@@ -10,8 +10,10 @@
 		69AB2D5F94028AE2A3EB86C5 /* StudyCastApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97A104FA6D3E1C259AEA6A9F /* StudyCastApp.swift */; };
 		6B0C7303CADC2F87983169D0 /* GStreamerPreviewEngine.mm in Sources */ = {isa = PBXBuildFile; fileRef = 1E6F5AA1ECA33C905E128FEB /* GStreamerPreviewEngine.mm */; };
 		6DEFB2AC20FE38299CBBD558 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8A0265C9F87018258AC4C80 /* ContentView.swift */; };
+		785D69C3F4D14F4B9EBA1201 /* RuntimePaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 785D69C2F4D14F4B9EBA1201 /* RuntimePaths.swift */; };
 		84700AADD50BCBC1D9D9FBDB /* StationMediaPreviewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87460B988579F8207F32A74A /* StationMediaPreviewModel.swift */; };
 		9393F4AA653CB8AFA32224B0 /* AudioOutputManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55B18F37859723041608CE32 /* AudioOutputManager.swift */; };
+		9E7B4A54D3A641E5A7BB1201 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9E7B4A53D3A641E5A7BB1201 /* Assets.xcassets */; };
 		B74171E49FDA20AF18BA503A /* Station.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4BE570131FD02FE1729A32D /* Station.swift */; };
 		BA3D7A0E106CB54634993DBC /* ThirdPartyNotices.md in Resources */ = {isa = PBXBuildFile; fileRef = 88179436D22B6DF2ADF5C441 /* ThirdPartyNotices.md */; };
 		BDC0D2C7A30EC569A70D295C /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6327135392501F05CA37C671 /* AppModel.swift */; };
@@ -25,8 +27,10 @@
 		1E6F5AA1ECA33C905E128FEB /* GStreamerPreviewEngine.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = GStreamerPreviewEngine.mm; sourceTree = "<group>"; };
 		55B18F37859723041608CE32 /* AudioOutputManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioOutputManager.swift; sourceTree = "<group>"; };
 		6327135392501F05CA37C671 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		785D69C2F4D14F4B9EBA1201 /* RuntimePaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimePaths.swift; sourceTree = "<group>"; };
 		87460B988579F8207F32A74A /* StationMediaPreviewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StationMediaPreviewModel.swift; sourceTree = "<group>"; };
 		88179436D22B6DF2ADF5C441 /* ThirdPartyNotices.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ThirdPartyNotices.md; sourceTree = "<group>"; };
+		9E7B4A53D3A641E5A7BB1201 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		8C0D9A16EC21642F49A19D4A /* StudyCast-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "StudyCast-Bridging-Header.h"; sourceTree = "<group>"; };
 		97A104FA6D3E1C259AEA6A9F /* StudyCastApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyCastApp.swift; sourceTree = "<group>"; };
 		B5D2362E54F2F27C72F0F258 /* SourceOffer.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = SourceOffer.md; sourceTree = "<group>"; };
@@ -63,6 +67,7 @@
 				E8A0265C9F87018258AC4C80 /* ContentView.swift */,
 				D5AD6B58FB110B103708F4AA /* GStreamerPreviewEngine.h */,
 				1E6F5AA1ECA33C905E128FEB /* GStreamerPreviewEngine.mm */,
+				785D69C2F4D14F4B9EBA1201 /* RuntimePaths.swift */,
 				F4BE570131FD02FE1729A32D /* Station.swift */,
 				F1EC2440CEEF8249BC1AC204 /* StationMediaPorts.swift */,
 				87460B988579F8207F32A74A /* StationMediaPreviewModel.swift */,
@@ -85,6 +90,7 @@
 		B307DC1D15B46C156D22CED6 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				9E7B4A53D3A641E5A7BB1201 /* Assets.xcassets */,
 				976E581F093134E944330C1D /* ThirdPartyNotices */,
 			);
 			path = Resources;
@@ -147,6 +153,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9E7B4A54D3A641E5A7BB1201 /* Assets.xcassets in Resources */,
 				FB77961402093E0C6006F2C8 /* SourceOffer.md in Resources */,
 				BA3D7A0E106CB54634993DBC /* ThirdPartyNotices.md in Resources */,
 			);
@@ -185,6 +192,7 @@
 				9393F4AA653CB8AFA32224B0 /* AudioOutputManager.swift in Sources */,
 				6DEFB2AC20FE38299CBBD558 /* ContentView.swift in Sources */,
 				6B0C7303CADC2F87983169D0 /* GStreamerPreviewEngine.mm in Sources */,
+				785D69C3F4D14F4B9EBA1201 /* RuntimePaths.swift in Sources */,
 				B74171E49FDA20AF18BA503A /* Station.swift in Sources */,
 				BEBF64BD6B3FA64D7396F574 /* StationMediaPorts.swift in Sources */,
 				84700AADD50BCBC1D9D9FBDB /* StationMediaPreviewModel.swift in Sources */,
@@ -242,8 +250,8 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -261,13 +269,14 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					/opt/homebrew/include,
-					"/opt/homebrew/include/gstreamer-1.0",
-					"/opt/homebrew/include/glib-2.0",
-					"/opt/homebrew/lib/glib-2.0/include",
-					/opt/homebrew/opt/gettext/include,
-					/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk/usr/include/ffi,
+					"$(HOMEBREW_PREFIX)/include",
+					"$(HOMEBREW_PREFIX)/include/gstreamer-1.0",
+					"$(HOMEBREW_PREFIX)/include/glib-2.0",
+					"$(HOMEBREW_PREFIX)/lib/glib-2.0/include",
+					"$(HOMEBREW_PREFIX)/opt/gettext/include",
+					"$(SDKROOT)/usr/include/ffi",
 				);
+				HOMEBREW_PREFIX = /opt/homebrew;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -275,9 +284,9 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					/opt/homebrew/opt/gstreamer/lib,
-					/opt/homebrew/opt/glib/lib,
-					/opt/homebrew/opt/gettext/lib,
+					"$(HOMEBREW_PREFIX)/opt/gstreamer/lib",
+					"$(HOMEBREW_PREFIX)/opt/glib/lib",
+					"$(HOMEBREW_PREFIX)/opt/gettext/lib",
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -304,13 +313,14 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					/opt/homebrew/include,
-					"/opt/homebrew/include/gstreamer-1.0",
-					"/opt/homebrew/include/glib-2.0",
-					"/opt/homebrew/lib/glib-2.0/include",
-					/opt/homebrew/opt/gettext/include,
-					/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk/usr/include/ffi,
+					"$(HOMEBREW_PREFIX)/include",
+					"$(HOMEBREW_PREFIX)/include/gstreamer-1.0",
+					"$(HOMEBREW_PREFIX)/include/glib-2.0",
+					"$(HOMEBREW_PREFIX)/lib/glib-2.0/include",
+					"$(HOMEBREW_PREFIX)/opt/gettext/include",
+					"$(SDKROOT)/usr/include/ffi",
 				);
+				HOMEBREW_PREFIX = /opt/homebrew;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -318,9 +328,9 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					/opt/homebrew/opt/gstreamer/lib,
-					/opt/homebrew/opt/glib/lib,
-					/opt/homebrew/opt/gettext/lib,
+					"$(HOMEBREW_PREFIX)/opt/gstreamer/lib",
+					"$(HOMEBREW_PREFIX)/opt/glib/lib",
+					"$(HOMEBREW_PREFIX)/opt/gettext/lib",
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -392,8 +402,8 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

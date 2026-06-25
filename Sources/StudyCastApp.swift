@@ -3,8 +3,7 @@
 //  StudyCast — record multiple AirPlay-capable devices at once.
 //
 //  Orchestrates one UxPlay (AirPlay-2 mirror receiver) subprocess per device,
-//  each recording its own MP4 via UxPlay's built-in `-mp4`. See project plan:
-//  ~/.claude/plans/reflector-distributed-floyd.md
+//  each recording its own MP4 via UxPlay's built-in `-mp4`.
 //
 
 import SwiftUI

@@ -1,15 +1,18 @@
 # Source Offer
 
-StudyCast bundles UxPlay as `Contents/Helpers/uxplay`.
+StudyCast release builds bundle UxPlay as `Contents/Helpers/uxplay`.
 
-The corresponding UxPlay source used by this build is expected at:
+Each binary release must publish:
 
-`/Users/nijianwei/Desktop/Vision Pro/LPVT/UxPlay`
+- The exact UxPlay source archive used for `Contents/Helpers/uxplay`.
+- The UxPlay commit hash in the release notes.
+- Any local UxPlay patches applied before building the helper.
+- The GPLv3 license text.
 
-When preparing a release, include the exact UxPlay source tree, any local
-patches, and the GPLv3 license text alongside the distributed app or publish a
-durable download location for those materials.
+The local release scripts require `UXPLAY_SOURCE_DIR` and `UXPLAY_COMMIT` so the
+matching source archive can be attached to GitHub Releases.
 
-GStreamer dynamic libraries and plugins are copied from the local Homebrew
-installation. Include the matching GStreamer license files and provide the
-corresponding source availability required by its licenses for release builds.
+StudyCast release builds also bundle GStreamer dynamic libraries/plugins and
+ffmpeg/ffprobe from the local Homebrew installation. Include the matching
+license files and provide the corresponding source availability required by
+their licenses for release builds.

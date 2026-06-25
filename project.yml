@@ -2,12 +2,12 @@ name: StudyCast
 options:
   bundleIdPrefix: com.visionone
   deploymentTarget:
-    macOS: "14.0"
+    macOS: "26.0"
   createIntermediateGroups: true
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.1"
+    MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
 targets:
   StudyCast:
@@ -20,29 +20,30 @@ targets:
       path: Info.plist
       properties:
         CFBundleDisplayName: StudyCast
-        LSMinimumSystemVersion: "14.0"
+        LSMinimumSystemVersion: "26.0"
         NSLocalNetworkUsageDescription: "StudyCast runs AirPlay receivers to record AirPlay-capable device streams on your local network."
         NSBonjourServices:
           - _airplay._tcp
           - _raop._tcp
     settings:
       base:
+        HOMEBREW_PREFIX: /opt/homebrew
         PRODUCT_BUNDLE_IDENTIFIER: com.visionone.StudyCast
         PRODUCT_NAME: StudyCast
         SWIFT_OBJC_BRIDGING_HEADER: Sources/StudyCast-Bridging-Header.h
         HEADER_SEARCH_PATHS:
           - $(inherited)
-          - /opt/homebrew/include
-          - /opt/homebrew/include/gstreamer-1.0
-          - /opt/homebrew/include/glib-2.0
-          - /opt/homebrew/lib/glib-2.0/include
-          - /opt/homebrew/opt/gettext/include
-          - /Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk/usr/include/ffi
+          - $(HOMEBREW_PREFIX)/include
+          - $(HOMEBREW_PREFIX)/include/gstreamer-1.0
+          - $(HOMEBREW_PREFIX)/include/glib-2.0
+          - $(HOMEBREW_PREFIX)/lib/glib-2.0/include
+          - $(HOMEBREW_PREFIX)/opt/gettext/include
+          - $(SDKROOT)/usr/include/ffi
         LIBRARY_SEARCH_PATHS:
           - $(inherited)
-          - /opt/homebrew/opt/gstreamer/lib
-          - /opt/homebrew/opt/glib/lib
-          - /opt/homebrew/opt/gettext/lib
+          - $(HOMEBREW_PREFIX)/opt/gstreamer/lib
+          - $(HOMEBREW_PREFIX)/opt/glib/lib
+          - $(HOMEBREW_PREFIX)/opt/gettext/lib
         LD_RUNPATH_SEARCH_PATHS:
           - $(inherited)
           - "@executable_path/../Frameworks/GStreamer/lib"

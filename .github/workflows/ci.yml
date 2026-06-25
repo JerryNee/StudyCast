@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    name: No-signing macOS build
+    runs-on: macos-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Install runtime build dependencies
+        run: brew install gstreamer ffmpeg
+
+      - name: Build
+        run: |
+          xcodebuild \
+            -project StudyCast.xcodeproj \
+            -scheme StudyCast \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build

@@ -1,11 +1,16 @@
 # Third-Party Notices
 
-StudyCast bundles UxPlay as a helper process and uses GStreamer libraries and
-plugins for local RTP preview playback.
+StudyCast release builds bundle UxPlay, ffmpeg, ffprobe, and GStreamer runtime
+components.
 
 UxPlay is distributed under the GNU General Public License version 3. Its source
-code and license text are included with this development workspace and copied
-into the application bundle when available.
+code, exact commit, license text, and any local patches must be published with
+each StudyCast binary release.
+
+ffmpeg and ffprobe are distributed by the FFmpeg project under license terms that
+depend on the enabled build configuration. StudyCast release builds use the
+Homebrew-provided ffmpeg package and include the package license notice when
+available.
 
 GStreamer is distributed under LGPL-family licenses. The bundled runtime is kept
 as separate dynamic libraries and plugins.
