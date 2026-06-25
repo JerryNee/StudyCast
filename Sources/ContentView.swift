@@ -14,6 +14,7 @@ struct ContentView: View {
     @AppStorage("StudyCast.previewImageMode") private var previewImageModeRaw = PreviewImageMode.fill.rawValue
     @AppStorage("StudyCast.tileDetailMode") private var tileDetailModeRaw = TileDetailMode.compact.rawValue
     @State private var didFitWindowThisLaunch = false
+    @State private var maximizedStationID: UUID?
 
     private var previewImageMode: PreviewImageMode {
         PreviewImageMode(rawValue: previewImageModeRaw) ?? .fill
@@ -36,26 +37,28 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             GeometryReader { proxy in
-                let metrics = PreviewGridMetrics(
-                    containerSize: proxy.size,
-                    stationCount: model.stations.count,
-                    preferredColumns: previewGridColumns,
-                    detailMode: tileDetailMode
-                )
+                if let station = maximizedStation {
+                    stationTile(station, isMaximized: true)
+                        .frame(width: max(1, proxy.size.width - 24), height: max(120, proxy.size.height - 24))
+                        .padding(12)
+                        .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+                } else {
+                    let metrics = PreviewGridMetrics(
+                        containerSize: proxy.size,
+                        stationCount: model.stations.count,
+                        preferredColumns: previewGridColumns,
+                        detailMode: tileDetailMode
+                    )
 
-                LazyVGrid(columns: metrics.gridItems, spacing: metrics.spacing) {
-                    ForEach(model.stations) { station in
-                        StationTile(
-                            station: station,
-                            audioOutputManager: model.audioOutputManager,
-                            imageMode: previewImageMode,
-                            detailMode: tileDetailMode
-                        )
-                        .frame(height: metrics.tileHeight)
+                    LazyVGrid(columns: metrics.gridItems, spacing: metrics.spacing) {
+                        ForEach(model.stations) { station in
+                            stationTile(station, isMaximized: false)
+                                .frame(height: metrics.tileHeight)
+                        }
                     }
+                    .padding(metrics.padding)
+                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
                 }
-                .padding(metrics.padding)
-                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             }
         }
         .onAppear {
@@ -63,6 +66,21 @@ struct ContentView: View {
             didFitWindowThisLaunch = true
             fitWindowToScreen()
         }
+        .onChange(of: model.stations.map(\.id)) { _, stationIDs in
+            if let maximizedStationID, !stationIDs.contains(maximizedStationID) {
+                self.maximizedStationID = nil
+            }
+        }
+        .onExitCommand {
+            if maximizedStationID != nil {
+                maximizedStationID = nil
+            }
+        }
+    }
+
+    private var maximizedStation: Station? {
+        guard let maximizedStationID else { return nil }
+        return model.stations.first { $0.id == maximizedStationID }
     }
 
     private var controlBar: some View {
@@ -117,10 +135,37 @@ struct ContentView: View {
 
     private var layoutMenu: some View {
         Menu {
+            if maximizedStation != nil {
+                Button {
+                    maximizedStationID = nil
+                } label: {
+                    Label("Return to Grid", systemImage: "rectangle.grid.2x2")
+                }
+
+                Divider()
+            }
+
             Button {
                 fitWindowToScreen()
             } label: {
                 Label("Fit Window to Screen", systemImage: "arrow.up.left.and.arrow.down.right")
+            }
+
+            Divider()
+
+            Menu {
+                ForEach(model.stations) { station in
+                    Button {
+                        maximizedStationID = station.id
+                    } label: {
+                        Label(
+                            stationDisplayName(station),
+                            systemImage: maximizedStationID == station.id ? "checkmark" : "arrow.up.left.and.arrow.down.right"
+                        )
+                    }
+                }
+            } label: {
+                Label("Maximize Station", systemImage: "arrow.up.left.and.arrow.down.right")
             }
 
             Divider()
@@ -145,6 +190,24 @@ struct ContentView: View {
             Label("Layout", systemImage: "rectangle.grid.2x2")
         }
         .help("布局")
+    }
+
+    private func stationTile(_ station: Station, isMaximized: Bool) -> some View {
+        StationTile(
+            station: station,
+            audioOutputManager: model.audioOutputManager,
+            imageMode: previewImageMode,
+            detailMode: tileDetailMode,
+            isMaximized: isMaximized,
+            onToggleMaximized: {
+                maximizedStationID = isMaximized ? nil : station.id
+            }
+        )
+    }
+
+    private func stationDisplayName(_ station: Station) -> String {
+        let trimmed = station.label.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? station.airplayName : trimmed
     }
 
     private var projectionButton: some View {
@@ -306,18 +369,24 @@ private struct StationTile: View {
     @ObservedObject var audioOutputManager: AudioOutputManager
     let imageMode: PreviewImageMode
     let detailMode: TileDetailMode
+    let isMaximized: Bool
+    let onToggleMaximized: () -> Void
 
     init(
         station: Station,
         audioOutputManager: AudioOutputManager,
         imageMode: PreviewImageMode,
-        detailMode: TileDetailMode
+        detailMode: TileDetailMode,
+        isMaximized: Bool,
+        onToggleMaximized: @escaping () -> Void
     ) {
         self.station = station
         self.preview = station.preview
         self.audioOutputManager = audioOutputManager
         self.imageMode = imageMode
         self.detailMode = detailMode
+        self.isMaximized = isMaximized
+        self.onToggleMaximized = onToggleMaximized
     }
 
     var body: some View {
@@ -345,6 +414,7 @@ private struct StationTile: View {
                             .foregroundStyle(.white)
                             .lineLimit(1)
                         Spacer(minLength: 8)
+                        maximizeButton(foregroundStyle: .white.opacity(0.92))
                         Circle().fill(dotColor).frame(width: 8, height: 8)
                     }
                 }
@@ -378,6 +448,7 @@ private struct StationTile: View {
                 Text("镜像选:").font(.caption2).foregroundStyle(.secondary)
                 Text(station.airplayName).font(.caption2.monospaced())
                 Spacer()
+                maximizeButton(foregroundStyle: isMaximized ? Color.accentColor : Color.secondary)
                 Circle().fill(dotColor).frame(width: 8, height: 8)
             }
             audioControls
@@ -397,6 +468,17 @@ private struct StationTile: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .background(Color.black.opacity(0.38), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func maximizeButton<S: ShapeStyle>(foregroundStyle: S) -> some View {
+        Button(action: onToggleMaximized) {
+            Image(systemName: isMaximized ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                .frame(width: 18, height: 18)
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(foregroundStyle)
+        .accessibilityLabel(isMaximized ? "Return to grid" : "Maximize station")
+        .help(isMaximized ? "返回网格" : "最大化此 Station")
     }
 
     private var previewPane: some View {
