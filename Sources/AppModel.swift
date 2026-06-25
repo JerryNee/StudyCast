@@ -4,7 +4,6 @@
 //
 
 import AppKit
-import Darwin
 import Foundation
 import SwiftUI
 
@@ -55,7 +54,6 @@ final class AppModel: ObservableObject {
             lastError = "找不到可执行的 uxplay:\n\(uxplayPath)"
             return
         }
-        stopOrphanedStudyCastReceivers()
 
         let stamp = AppModel.timestamp()
         let destDir = outputDirectory
@@ -139,59 +137,6 @@ final class AppModel: ObservableObject {
         guard let currentStagingDir else { return }
         try? FileManager.default.removeItem(at: currentStagingDir)
         self.currentStagingDir = nil
-    }
-
-    private func stopOrphanedStudyCastReceivers() {
-        let ps = Process()
-        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
-        ps.arguments = ["-axo", "pid=,command="]
-
-        let pipe = Pipe()
-        ps.standardOutput = pipe
-        ps.standardError = Pipe()
-
-        do {
-            try ps.run()
-            ps.waitUntilExit()
-        } catch {
-            return
-        }
-
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: data, encoding: .utf8) ?? ""
-        let pids = output
-            .split(separator: "\n")
-            .compactMap { line -> pid_t? in
-                let text = String(line).trimmingCharacters(in: .whitespaces)
-                guard text.contains(uxplayPath),
-                      text.contains("-n StudyCast-") else {
-                    return nil
-                }
-                let fields = text.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
-                guard let first = fields.first,
-                      let pid = Int32(first) else {
-                    return nil
-                }
-                return pid
-            }
-
-        guard !pids.isEmpty else { return }
-
-        for pid in pids {
-            kill(pid, SIGINT)
-        }
-
-        let deadline = Date().addingTimeInterval(2)
-        while Date() < deadline {
-            if pids.allSatisfy({ kill($0, 0) != 0 }) {
-                return
-            }
-            usleep(100_000)
-        }
-
-        for pid in pids where kill(pid, 0) == 0 {
-            kill(pid, SIGTERM)
-        }
     }
 
     private static func stagingRoot() -> URL {
