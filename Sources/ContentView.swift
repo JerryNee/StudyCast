@@ -11,14 +11,9 @@ struct ContentView: View {
     @EnvironmentObject var model: AppModel
 
     @AppStorage("StudyCast.previewGridColumns") private var previewGridColumns = 0
-    @AppStorage("StudyCast.previewImageMode") private var previewImageModeRaw = PreviewImageMode.fill.rawValue
     @AppStorage("StudyCast.tileDetailMode") private var tileDetailModeRaw = TileDetailMode.compact.rawValue
     @State private var didFitWindowThisLaunch = false
     @State private var maximizedStationID: UUID?
-
-    private var previewImageMode: PreviewImageMode {
-        PreviewImageMode(rawValue: previewImageModeRaw) ?? .fill
-    }
 
     private var tileDetailMode: TileDetailMode {
         TileDetailMode(rawValue: tileDetailModeRaw) ?? .compact
@@ -177,11 +172,6 @@ struct ContentView: View {
                 }
             }
 
-            Picker("Image", selection: $previewImageModeRaw) {
-                Text("Fill").tag(PreviewImageMode.fill.rawValue)
-                Text("Fit").tag(PreviewImageMode.fit.rawValue)
-            }
-
             Picker("Tiles", selection: $tileDetailModeRaw) {
                 Text("Compact").tag(TileDetailMode.compact.rawValue)
                 Text("Expanded").tag(TileDetailMode.expanded.rawValue)
@@ -196,7 +186,6 @@ struct ContentView: View {
         StationTile(
             station: station,
             audioOutputManager: model.audioOutputManager,
-            imageMode: previewImageMode,
             detailMode: tileDetailMode,
             isMaximized: isMaximized,
             onToggleMaximized: {
@@ -279,18 +268,6 @@ struct ContentView: View {
     }
 }
 
-private enum PreviewImageMode: String {
-    case fill
-    case fit
-
-    var contentMode: ContentMode {
-        switch self {
-        case .fill: return .fill
-        case .fit: return .fit
-        }
-    }
-}
-
 private enum TileDetailMode: String {
     case compact
     case expanded
@@ -367,7 +344,6 @@ private struct StationTile: View {
     @ObservedObject var station: Station
     @ObservedObject private var preview: StationMediaPreviewModel
     @ObservedObject var audioOutputManager: AudioOutputManager
-    let imageMode: PreviewImageMode
     let detailMode: TileDetailMode
     let isMaximized: Bool
     let onToggleMaximized: () -> Void
@@ -375,7 +351,6 @@ private struct StationTile: View {
     init(
         station: Station,
         audioOutputManager: AudioOutputManager,
-        imageMode: PreviewImageMode,
         detailMode: TileDetailMode,
         isMaximized: Bool,
         onToggleMaximized: @escaping () -> Void
@@ -383,7 +358,6 @@ private struct StationTile: View {
         self.station = station
         self.preview = station.preview
         self.audioOutputManager = audioOutputManager
-        self.imageMode = imageMode
         self.detailMode = detailMode
         self.isMaximized = isMaximized
         self.onToggleMaximized = onToggleMaximized
@@ -513,9 +487,11 @@ private struct StationTile: View {
     }
 
     private func previewImage(_ image: CGImage, in size: CGSize) -> some View {
-        Image(decorative: image, scale: 1, orientation: .up)
+        let sourceAspectRatio = CGFloat(image.width) / max(1, CGFloat(image.height))
+
+        return Image(decorative: image, scale: 1, orientation: .up)
             .resizable()
-            .aspectRatio(contentMode: imageMode.contentMode)
+            .aspectRatio(sourceAspectRatio, contentMode: .fit)
             .frame(width: size.width, height: size.height)
             .clipped()
     }
