@@ -29,6 +29,14 @@ PATCH_APP_EXECUTABLES="${PATCH_APP_EXECUTABLES:-1}"
 SIGN_APP_BUNDLE="${SIGN_APP_BUNDLE:-0}"
 UXPLAY_COMMIT="${UXPLAY_COMMIT:-}"
 
+if [[ -z "${UXPLAY_SOURCE_DIR}" ]]; then
+  REPO_ROOT="${PROJECT_DIR:-$(pwd)}"
+  SIBLING_UXPLAY_DIR="$(cd "${REPO_ROOT}/.." 2>/dev/null && pwd)/UxPlay"
+  if [[ -x "${SIBLING_UXPLAY_DIR}/uxplay" ]]; then
+    UXPLAY_SOURCE_DIR="${SIBLING_UXPLAY_DIR}"
+  fi
+fi
+
 if [[ -z "${UXPLAY_PATH}" && -n "${UXPLAY_SOURCE_DIR}" && -x "${UXPLAY_SOURCE_DIR}/uxplay" ]]; then
   UXPLAY_PATH="${UXPLAY_SOURCE_DIR}/uxplay"
 fi
