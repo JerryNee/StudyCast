@@ -57,6 +57,9 @@ targets:
           - -lgobject-2.0
           - -lglib-2.0
           - -lintl
+      configs:
+        Debug:
+          ENABLE_DEBUG_DYLIB: NO
     postBuildScripts:
       - name: Bundle UxPlay and GStreamer
         script: bash scripts/bundle_runtime.sh
