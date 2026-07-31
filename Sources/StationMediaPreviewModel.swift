@@ -67,6 +67,15 @@ final class StationMediaPreviewModel: ObservableObject {
         }
     }
 
+    /// Drops the displayed frame while leaving the receiver running, so the
+    /// tile returns to its waiting state instead of freezing on the last frame
+    /// a disconnected sender happened to send.
+    func clearFrame() {
+        guard ports != nil else { return }
+        image = nil
+        statusText = "等待视频流"
+    }
+
     func setAudioOutputDeviceID(_ audioOutputDeviceID: Int?) {
         audioOutputStatusText = audioOutputDeviceID == nil ? "输出设备不可用" : nil
         guard ports != nil else { return }
