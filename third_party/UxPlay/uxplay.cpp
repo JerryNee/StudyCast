@@ -161,6 +161,7 @@ static std::vector<std::string> allowed_clients;
 static std::vector<std::string> blocked_clients;
 static bool restrict_clients;
 static bool setup_legacy_pairing = false;
+static bool peer_to_peer = false;
 static unsigned char pin_pw = 0;  /* 0: no client access control; 1: onscreen pin ; 2: require password (same password for all clients)  3: random pw*/
 static std::string password = "";
 static guint min_password_length = MIN_PASSWORD_LENGTH;
@@ -1173,6 +1174,8 @@ static void print_info (char *name) {
     printf("-md <fn>  In Airplay Audio (ALAC) mode, write metadata text to file <fn>\n");
     printf("-reset n  Reset after n seconds of client silence (default n=%d, 0=never)\n", MISSED_FEEDBACK_LIMIT);
     printf("-nofreeze Do NOT leave frozen screen in place after reset\n");
+    printf("-p2p      Also advertise over Apple peer-to-peer (AWDL), so clients\n");
+    printf("          can find and reach UxPlay without a shared network (macOS)\n");
     printf("-nc       Do NOT  Close video window when client stops mirroring\n");
     printf("-nc no    Cancel the -nc option (DO close video window) \n");
     printf("-nohold   Drop current connection when new client connects.\n");
@@ -1606,6 +1609,8 @@ static void parse_arguments (int argc, char *argv[]) {
             fprintf(stderr,"The uxplay option \"-t\" has been removed: it was a workaround for an  Avahi issue.\n");
             fprintf(stderr,"The correct solution is to open network port UDP 5353 in the firewall for mDNS queries\n");
             exit(1);
+        } else if (arg == "-p2p") {
+            peer_to_peer = true;
         } else if (arg == "-nc") {
             new_window_closing_behavior = false;
             if (i <  argc - 1) {
@@ -2184,6 +2189,7 @@ static int start_dnssd(std::vector<char> hw_addr, std::string name) {
         LOGE("Could not initialize dnssd library!: error %d", dnssd_error);
         return 1;
     }
+    dnssd_set_peer_to_peer(dnssd, peer_to_peer ? 1 : 0);
 
     /* after dnssd starts, reset the default feature set here 
      * (overwrites features set in dnssdint.h)
@@ -2663,6 +2669,7 @@ extern "C" void audio_set_volume (void *cls, float volume) {
         gst_volume = pow(10.0, 0.05*db);
     }
     audio_renderer_set_volume(gst_volume);
+    video_renderer_hls_set_volume(gst_volume);
 }
 
 extern "C" void audio_get_format (void *cls, unsigned char *ct, unsigned short *spf, bool *usingScreen, bool *isMedia, uint64_t *audioFormat) {

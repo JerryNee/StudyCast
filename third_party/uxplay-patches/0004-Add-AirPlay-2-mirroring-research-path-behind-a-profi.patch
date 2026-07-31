@@ -1,18 +1,18 @@
-From fde2fa632c033d9e810a39ff62be3f454c9d25d0 Mon Sep 17 00:00:00 2001
+From 0b6e760d40db1416a67116c8d6c97d7ee010ad46 Mon Sep 17 00:00:00 2001
 From: JerryNee <ni12@illinois.edu>
-Date: Fri, 31 Jul 2026 17:07:18 -0500
-Subject: [PATCH 3/3] Add AirPlay 2 mirroring research path behind a profile
+Date: Fri, 31 Jul 2026 17:21:27 -0500
+Subject: [PATCH 4/4] Add AirPlay 2 mirroring research path behind a profile
 
 Impersonating a Mac receiver (a Mac model string, a modern srcvers and the
-HomeKit pairing endpoints) is one way to be offered over Apple peer-to-peer.
-It works for discovery, and this adds what that path needs: HomeKit
-pair-setup/pair-verify via pair_ap, the encrypted control and event channels,
-and the AP2-shaped SETUP handling.
+HomeKit pairing endpoints) is another way to be offered over Apple
+peer-to-peer. It works for discovery, and this adds what that path needs:
+HomeKit pair-setup/pair-verify via pair_ap, the encrypted control and event
+channels, and the AP2-shaped SETUP handling.
 
 It does not work for video. A sender that sees a Mac receiver switches to the
 AP2 media setup, which omits the legacy FairPlay ekey and derives the
 mirroring key by a route Apple has not published. Frames arrive and cannot be
-decrypted.
+decrypted. -p2p is the option that actually works, and it needs none of this.
 
 Keep it anyway, disabled by default, because it is the only place the AP2
 handshake is implemented and because it may matter if senders ever stop
@@ -30,9 +30,8 @@ The impersonated Bonjour identity uses synthetic identifiers. Copying a real
 machine's device ID and pairing UUIDs would leak that device's identity and
 collide with it on any network where it is present.
 
-Selected by UXPLAY_DISCOVERY_PROFILE=mac-p2p. The shipping configuration does
-not use any of this: a plain UxPlay identity reaches AWDL just as well and
-keeps the legacy media path that decrypts correctly.
+Selected by UXPLAY_DISCOVERY_PROFILE=mac-p2p rather than an option, since it
+is an investigation rather than a feature.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 ---
@@ -56,8 +55,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
  lib/raop_handlers.h         |  577 ++++++-
  lib/raop_rtp_mirror.c       |  160 +-
  lib/raop_rtp_mirror.h       |    5 +
- uxplay.cpp                  |    1 +
- 21 files changed, 7655 insertions(+), 36 deletions(-)
+ 20 files changed, 7654 insertions(+), 36 deletions(-)
  create mode 100644 lib/ap2_capture.c
  create mode 100644 lib/ap2_capture.h
  create mode 100644 lib/pair_ap/pair-internal.h
@@ -7337,7 +7335,7 @@ index 7098fae..3516197 100644
  
      /* Initialize the http daemon, (this will take a copy of httpd_cbs) */
 diff --git a/lib/raop_handlers.h b/lib/raop_handlers.h
-index 1aeba28..4c40955 100644
+index 9f8518c..95f5e9c 100644
 --- a/lib/raop_handlers.h
 +++ b/lib/raop_handlers.h
 @@ -131,6 +131,26 @@ raop_handler_info(raop_conn_t *conn,
@@ -7995,7 +7993,7 @@ index 1aeba28..4c40955 100644
                  plist_array_append_item(res_streams_node, res_stream_node);
  
                  break;
-@@ -1207,8 +1756,14 @@ raop_handler_record(raop_conn_t *conn,
+@@ -1212,8 +1761,14 @@ raop_handler_record(raop_conn_t *conn,
      unsigned int ad = (unsigned int) (((uint64_t) raop->audio_delay_micros) * AUDIO_SAMPLE_RATE / SECOND_IN_USECS);
      snprintf(audio_latency, sizeof(audio_latency), "%u", ad);
      logger_log(raop->logger, LOGGER_DEBUG, "raop_handler_record");
@@ -8248,15 +8246,3 @@ index 2e7914d..4752845 100644
  void raop_rtp_mirror_start(raop_rtp_mirror_t *raop_rtp_mirror, unsigned short *mirror_data_lport, uint8_t show_client_FPS_data);
  void raop_rtp_mirror_stop(raop_rtp_mirror_t *raop_rtp_mirror);
  void raop_rtp_mirror_destroy(raop_rtp_mirror_t *raop_rtp_mirror);
-diff --git a/uxplay.cpp b/uxplay.cpp
-index 28b4621..8b78b42 100644
---- a/uxplay.cpp
-+++ b/uxplay.cpp
-@@ -346,6 +346,7 @@ static void log(int level, const char* format, ...) {
-     vprintf(format, vargs);
-     printf("\n");
-     va_end(vargs);
-+    fflush(stdout);
- }
- 
- #define LOGD(...) log(LOGGER_DEBUG, __VA_ARGS__)

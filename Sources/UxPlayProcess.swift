@@ -13,21 +13,22 @@ final class UxPlayProcess {
     static let logSuffix = ".uxplay.log"
     static let ap2CaptureSuffix = ".ap2capture"
 
-    /// Discovery profile every station runs.
+    /// Research profile for the AP2 media-key investigation, or empty for the
+    /// normal configuration.
     ///
-    /// `p2p` registers the receiver over Apple peer-to-peer (AWDL) in addition
-    /// to the normal interfaces, while leaving UxPlay's own advertisement
-    /// untouched. That combination is what lets a sender reach StudyCast
-    /// directly, with no managed-network registration, and still negotiate the
-    /// legacy FairPlay media setup UxPlay can decrypt.
+    /// Stations are normally published over Apple peer-to-peer with UxPlay's
+    /// own advertisement left untouched (the helper's `-p2p` option). That is
+    /// what lets a sender reach StudyCast directly, with no managed-network
+    /// registration, while still negotiating the legacy FairPlay media setup
+    /// UxPlay can decrypt.
     ///
-    /// The `mac-*` profiles impersonate a Mac receiver. They also win AWDL,
+    /// `mac-p2p` instead impersonates a Mac receiver. It also reaches AWDL,
     /// but a Mac identity makes senders switch to the AP2 media path, which
     /// omits the legacy ekey and derives the media key by an unpublished
-    /// route -- video then arrives but cannot be decrypted. They are kept for
-    /// research only; see docs/AP2_MIRRORING_KEY_SEARCH.md.
-    static let discoveryProfile = ProcessInfo.processInfo
-        .environment["STUDYCAST_DISCOVERY_PROFILE"] ?? "p2p"
+    /// route -- video then arrives but cannot be decrypted. It exists only to
+    /// capture samples; see docs/AP2_MIRRORING_KEY_SEARCH.md.
+    static let researchProfile = ProcessInfo.processInfo
+        .environment["STUDYCAST_DISCOVERY_PROFILE"] ?? ""
 
     private var process: Process?
     private var logHandle: FileHandle?
@@ -50,12 +51,11 @@ final class UxPlayProcess {
 
         let p = Process()
         p.executableURL = try Self.resolveUxPlayURL(developmentPath: uxplayPath)
-        // Only the research "mac-*" profiles impersonate a Mac receiver. The
-        // default "p2p" profile keeps the station's own name, Device ID and
-        // ports so the sender sees a plain UxPlay receiver and negotiates the
-        // legacy media setup.
+        // Only the research profile impersonates a Mac receiver. Normally the
+        // station keeps its own name, Device ID and ports, so the sender sees
+        // a plain UxPlay receiver and negotiates the legacy media setup.
         let usesMacIdentity =
-            useMacWireIdentity && Self.discoveryProfile.hasPrefix("mac")
+            useMacWireIdentity && Self.researchProfile.hasPrefix("mac")
         // Never reuse the built-in receiver's instance name or Device ID:
         // visionOS merges them and routes the selection to ControlCenter.
         let effectiveName = usesMacIdentity ? "StudyCast-HKP-Probe15" : name
@@ -66,6 +66,11 @@ final class UxPlayProcess {
             // -pin is also what turns on feature bit 27, which senders look
             // at when deciding to offer the receiver over peer-to-peer.
             "-pin", pairingPIN,
+            // Publish over Apple peer-to-peer as well as the local network.
+            // This is what lets a sender reach StudyCast without the network
+            // operator registering the receiver first, and it also opts the
+            // listening sockets into accepting AWDL-delivered traffic.
+            "-p2p",
         ]
         if usesMacIdentity {
             // The research profiles need the legacy AirPlay ports and verbose
@@ -86,22 +91,16 @@ final class UxPlayProcess {
 
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = RuntimePaths.pathEnvironment()
-        // Every station registers over Apple peer-to-peer. This is what lets a
-        // sender reach StudyCast without the network operator registering the
-        // receiver first.
-        env["UXPLAY_DISCOVERY_PROFILE"] = Self.discoveryProfile
-        // Registering over AWDL is not enough on its own: a conventional BSD
-        // listener drops traffic delivered by that interface unless it opts in,
-        // so the receiver would be visible but never see the connection.
-        env["UXPLAY_AWDL_RECV_ANYIF"] = "1"
-        if useMacWireIdentity {
-            // Research path only: Mac-identity profiles push the sender onto
-            // the AP2 media setup, which omits the legacy ekey. Dump the
+        if usesMacIdentity {
+            // Research path only: the Mac-identity profile pushes the sender
+            // onto the AP2 media setup, which omits the legacy ekey. Dump the
             // session material and first encrypted payloads so
             // scripts/ap2_key_search.py can search for the media key offline.
+            env["UXPLAY_DISCOVERY_PROFILE"] = Self.researchProfile
             env["UXPLAY_HKP_MEDIA_KEY_MODE"] = "fairplay"
             env["UXPLAY_AP2_CAPTURE"] = mp4Base.path + Self.ap2CaptureSuffix
         } else {
+            env.removeValue(forKey: "UXPLAY_DISCOVERY_PROFILE")
             env.removeValue(forKey: "UXPLAY_HKP_MEDIA_KEY_MODE")
             env.removeValue(forKey: "UXPLAY_AP2_CAPTURE")
         }

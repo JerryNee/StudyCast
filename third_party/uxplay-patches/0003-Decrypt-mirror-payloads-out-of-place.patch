@@ -1,7 +1,7 @@
-From 1f168edc365b8d9c76f3ac4aeb169f6ee7b6e12d Mon Sep 17 00:00:00 2001
+From 2ffa5dd38777cd25ad6e5693694df973be8407b0 Mon Sep 17 00:00:00 2001
 From: JerryNee <ni12@illinois.edu>
-Date: Fri, 31 Jul 2026 17:07:18 -0500
-Subject: [PATCH 2/3] Decrypt mirror payloads out of place
+Date: Fri, 31 Jul 2026 17:21:27 -0500
+Subject: [PATCH 3/4] Decrypt mirror payloads out of place
 
 mirror_buffer_decrypt() decrypted into the input buffer and then copied the
 result to the output. That is invisible with a single buffer, but it destroys

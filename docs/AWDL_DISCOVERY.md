@@ -37,7 +37,9 @@ setsockopt(server_fd, SOL_SOCKET, SO_RECV_ANYIF, &on, sizeof(on));
 
 这是最隐蔽的一环。普通 BSD 监听 socket 会**静默丢弃**由 AWDL 投递的数据包。没有它，接收端会出现在发送端列表里、但连接永远到不了服务进程——即旧文档记录的「可见但 `Unable to Connect`、TCP 7000 收发零字节」。
 
-该选项通过 `UXPLAY_AWDL_RECV_ANYIF` 控制，StudyCast 对每个 Station 都设置它。
+这两处都由 UxPlay 的 `-p2p` 选项一起打开，StudyCast 给每个 Station 都传它。
+不加该选项时 UxPlay 的行为完全不变——服务仍解析到主机本身的名字，而不是
+mDNSResponder 为点对点注册发布的随机 UUID 名字。
 
 ### 2.3 打开 feature bit 27
 

@@ -30,15 +30,14 @@
 #define MAX_SERVNAME 256
 #define DISCOVERY_PROFILE_ENV "UXPLAY_DISCOVERY_PROFILE"
 /*
- * "p2p" is the profile that matters: it publishes an otherwise untouched
- * UxPlay receiver over Apple peer-to-peer as well as the normal interfaces.
+ * Peer-to-peer registration itself is a normal option, -p2p.
  *
- * "mac-p2p" additionally impersonates a Mac receiver. It also reaches AWDL,
- * but a Mac identity makes senders switch to the AP2 media setup, which omits
- * the legacy FairPlay ekey -- video then arrives and cannot be decrypted. It
- * exists only to capture material for that investigation.
+ * This profile additionally impersonates a Mac receiver. It also reaches
+ * AWDL, but a Mac identity makes senders switch to the AP2 media setup, which
+ * omits the legacy FairPlay ekey -- video then arrives and cannot be
+ * decrypted. It exists only to capture material for that investigation, so it
+ * stays an environment variable rather than a documented option.
  */
-#define P2P_DISCOVERY_PROFILE "p2p"
 #define MAC_P2P_DISCOVERY_PROFILE "mac-p2p"
 
 /*
@@ -55,19 +54,6 @@
 #define MAC_WIRE_GID "00000000-0000-4000-8000-000000000001"
 #define MAC_WIRE_PI "00000000-0000-4000-8000-000000000001"
 #define MAC_WIRE_PSI "00000000-0000-4000-8000-000000000002"
-
-/*
- * Opt selected receivers into Apple's peer-to-peer Bonjour discovery paths.
- * Their TXT identity and feature bitmap remain UxPlay's own so the client only
- * negotiates transports and pairing modes that UxPlay actually implements.
- */
-static int
-p2p_discovery_profile_enabled(void)
-{
-    const char *profile = getenv(DISCOVERY_PROFILE_ENV);
-    return profile && (!strcmp(profile, P2P_DISCOVERY_PROFILE)
-                       || !strcmp(profile, MAC_P2P_DISCOVERY_PROFILE));
-}
 
 static int
 mac_wire_discovery_profile_enabled(void)
@@ -92,14 +78,21 @@ mac_wire_features(void)
     return MAC_WIRE_FEATURES;
 }
 
+/*
+ * Opt the receiver into Apple's peer-to-peer Bonjour discovery paths. Its TXT
+ * identity and feature bitmap remain UxPlay's own, so the client only
+ * negotiates transports and pairing modes that UxPlay actually implements.
+ */
 static void
-discovery_registration_options(DNSServiceFlags *flags, uint32_t *interface_index)
+discovery_registration_options(dnssd_t *dnssd_public, DNSServiceFlags *flags,
+                               uint32_t *interface_index)
 {
     *flags = 0;
     *interface_index = 0;
 
 #ifdef __APPLE__
-    if (p2p_discovery_profile_enabled()) {
+    /* The Mac research profile implies peer-to-peer registration. */
+    if (dnssd_public->peer_to_peer || mac_wire_discovery_profile_enabled()) {
         /*
          * Register on the normal infrastructure interfaces and opt into both
          * Apple peer-to-peer discovery families.  Pinning the service to
@@ -303,7 +296,8 @@ dnssd_register_raop(dnssd_t *dnssd_public, unsigned short port)
     char features[22] = {0};
     DNSServiceFlags registration_flags = 0;
     uint32_t registration_interface = 0;
-    discovery_registration_options(&registration_flags, &registration_interface);
+    discovery_registration_options(dnssd_public, &registration_flags,
+                                   &registration_interface);
 
     assert(dnssd_public);
     assert(dnssd_public->dnssd_private);
@@ -404,7 +398,8 @@ dnssd_register_airplay(dnssd_t *dnssd_public, unsigned short port)
     char features[22] = {0};
     DNSServiceFlags registration_flags = 0;
     uint32_t registration_interface = 0;
-    discovery_registration_options(&registration_flags, &registration_interface);
+    discovery_registration_options(dnssd_public, &registration_flags,
+                                   &registration_interface);
 
     assert(dnssd_public);
     assert(dnssd_public->dnssd_private);

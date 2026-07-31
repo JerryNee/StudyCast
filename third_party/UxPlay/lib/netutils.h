@@ -19,6 +19,11 @@ int netutils_init();
 void netutils_cleanup();
 
 int netutils_init_socket(unsigned short *port, int use_ipv6, int use_udp);
+/*
+ * Allow listening sockets to receive traffic delivered over Apple
+ * peer-to-peer (AWDL) links. Call once before any socket is created.
+ */
+void netutils_set_peer_to_peer(int enable);
 unsigned char *netutils_get_address(void *sockaddr, int *length, unsigned int *zone_id, unsigned short *port);
 int netutils_parse_address(int family, const char *src, void *dst, int dstlen);
 

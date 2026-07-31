@@ -30,6 +30,14 @@
 #define SO_RECV_ANYIF 0x1104
 #endif
 
+static int peer_to_peer_enabled = 0;
+
+void
+netutils_set_peer_to_peer(int enable)
+{
+    peer_to_peer_enabled = enable ? 1 : 0;
+}
+
 int
 netutils_init()
 {
@@ -124,8 +132,7 @@ netutils_init_socket(unsigned short *port, int use_ipv6, int use_udp)
     }
 
 #if defined(__APPLE__)
-    const char *awdl_receive = getenv("UXPLAY_AWDL_RECV_ANYIF");
-    if (awdl_receive && awdl_receive[0] != '\0' && strcmp(awdl_receive, "0") != 0) {
+    if (peer_to_peer_enabled) {
         int receive_anyif = 1;
         int anyif_ret = setsockopt(
             server_fd,

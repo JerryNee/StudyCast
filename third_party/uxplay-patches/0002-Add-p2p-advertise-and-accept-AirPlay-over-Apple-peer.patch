@@ -1,39 +1,51 @@
-From c3f0c0a79e2d6d4d194eb1b9b681cb755f673f27 Mon Sep 17 00:00:00 2001
+From a63d2a3105e03ce9f774f8f6d13c8d29bee340cc Mon Sep 17 00:00:00 2001
 From: JerryNee <ni12@illinois.edu>
-Date: Fri, 31 Jul 2026 17:07:18 -0500
-Subject: [PATCH 1/3] Discover and accept AirPlay over Apple peer-to-peer
+Date: Fri, 31 Jul 2026 17:21:10 -0500
+Subject: [PATCH 2/4] Add -p2p: advertise and accept AirPlay over Apple
+ peer-to-peer
 
-A receiver that is only published on the infrastructure interfaces depends on
-the network operator: managed networks filter or proxy mDNS, and some isolate
-clients from each other. Publishing over AWDL as well lets a sender reach the
-receiver directly, with no network configuration and no device registration.
+A receiver published only on the infrastructure interfaces depends on the
+network it sits on. Managed networks filter or proxy mDNS, and many isolate
+clients from each other, so UxPlay is invisible or unreachable on exactly the
+networks where a shared display is most useful -- the recurring complaint in
+issues #234 and #163. Publishing over AWDL as well lets a client reach UxPlay
+directly, needing neither a shared network nor cooperation from its operator.
 
-Two things are needed, and neither works without the other:
+Two things are required, and neither works alone:
 
 - Register with kDNSServiceFlagsIncludeP2P | kDNSServiceFlagsIncludeAWDL on
   kDNSServiceInterfaceIndexAny. Pinning the registration to awdl0 instead
   hides the service from clients using other peer-to-peer interfaces, which
-  is why earlier IncludeP2P experiments looked like a dead end.
+  is what makes IncludeP2P look ineffective when tried on its own.
 
 - Set SO_RECV_ANYIF on the listening sockets. A conventional BSD listener
-  silently drops packets delivered over AWDL, so without it the receiver is
-  visible in the sender's list but the service never sees the connection at
-  all -- no bytes, no log line, just "unable to connect".
+  silently drops packets delivered over AWDL, so without it the receiver
+  appears in the client's list but the server never sees the connection --
+  no bytes on the port, nothing logged, just a client that cannot connect.
 
-Both are opt-in so default UxPlay networking is unchanged:
-UXPLAY_DISCOVERY_PROFILE selects the registration profile and
-UXPLAY_AWDL_RECV_ANYIF enables the socket option.
+Both are off unless -p2p is given, so default behaviour is unchanged: without
+the option the service still resolves to the host's own name, with it to the
+randomized UUID name mDNSResponder publishes for peer-to-peer registrations.
 
-Note that mDNSResponder publishes a randomized UUID hostname for
-peer-to-peer registrations. That is expected Apple behaviour, not a fault;
-the name resolves over the AWDL link.
+SO_RECV_ANYIF is not in the public SDK headers; the value is taken from XNU's
+private socket.h. That is the reason this is opt-in and macOS-only. Note the
+scope: this makes UxPlay findable and reachable over an AWDL link. It does
+not implement Apple's peer-to-peer AirPlay handshake -- the media session is
+the ordinary one, over that link instead of the infrastructure network.
+
+Also flush the log line as it is written, so output stays readable when
+stdout is a pipe rather than a terminal.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 ---
  .gitignore          |  10 +-
- lib/dns_sd/dns_sd.c | 280 +++++++++++++++++++++++++++++++++-----------
- lib/netutils.c      |  26 ++++
- 3 files changed, 249 insertions(+), 67 deletions(-)
+ lib/dns_sd/dns_sd.c | 275 +++++++++++++++++++++++++++++++++-----------
+ lib/dnssd.c         |  14 +++
+ lib/dnssd.h         |   4 +
+ lib/netutils.c      |  33 ++++++
+ lib/netutils.h      |   5 +
+ uxplay.cpp          |   7 ++
+ 7 files changed, 281 insertions(+), 67 deletions(-)
 
 diff --git a/.gitignore b/.gitignore
 index 01f9cb9..404443d 100644
@@ -53,24 +65,23 @@ index 01f9cb9..404443d 100644
 +*.a
 +/uxplay
 diff --git a/lib/dns_sd/dns_sd.c b/lib/dns_sd/dns_sd.c
-index 6713753..dc478a6 100644
+index 6713753..241c329 100644
 --- a/lib/dns_sd/dns_sd.c
 +++ b/lib/dns_sd/dns_sd.c
-@@ -28,6 +28,89 @@
+@@ -28,6 +28,82 @@
  
  #define MAX_DEVICEID 18
  #define MAX_SERVNAME 256
 +#define DISCOVERY_PROFILE_ENV "UXPLAY_DISCOVERY_PROFILE"
 +/*
-+ * "p2p" is the profile that matters: it publishes an otherwise untouched
-+ * UxPlay receiver over Apple peer-to-peer as well as the normal interfaces.
++ * Peer-to-peer registration itself is a normal option, -p2p.
 + *
-+ * "mac-p2p" additionally impersonates a Mac receiver. It also reaches AWDL,
-+ * but a Mac identity makes senders switch to the AP2 media setup, which omits
-+ * the legacy FairPlay ekey -- video then arrives and cannot be decrypted. It
-+ * exists only to capture material for that investigation.
++ * This profile additionally impersonates a Mac receiver. It also reaches
++ * AWDL, but a Mac identity makes senders switch to the AP2 media setup, which
++ * omits the legacy FairPlay ekey -- video then arrives and cannot be
++ * decrypted. It exists only to capture material for that investigation, so it
++ * stays an environment variable rather than a documented option.
 + */
-+#define P2P_DISCOVERY_PROFILE "p2p"
 +#define MAC_P2P_DISCOVERY_PROFILE "mac-p2p"
 +
 +/*
@@ -87,19 +98,6 @@ index 6713753..dc478a6 100644
 +#define MAC_WIRE_GID "00000000-0000-4000-8000-000000000001"
 +#define MAC_WIRE_PI "00000000-0000-4000-8000-000000000001"
 +#define MAC_WIRE_PSI "00000000-0000-4000-8000-000000000002"
-+
-+/*
-+ * Opt selected receivers into Apple's peer-to-peer Bonjour discovery paths.
-+ * Their TXT identity and feature bitmap remain UxPlay's own so the client only
-+ * negotiates transports and pairing modes that UxPlay actually implements.
-+ */
-+static int
-+p2p_discovery_profile_enabled(void)
-+{
-+    const char *profile = getenv(DISCOVERY_PROFILE_ENV);
-+    return profile && (!strcmp(profile, P2P_DISCOVERY_PROFILE)
-+                       || !strcmp(profile, MAC_P2P_DISCOVERY_PROFILE));
-+}
 +
 +static int
 +mac_wire_discovery_profile_enabled(void)
@@ -124,14 +122,21 @@ index 6713753..dc478a6 100644
 +    return MAC_WIRE_FEATURES;
 +}
 +
++/*
++ * Opt the receiver into Apple's peer-to-peer Bonjour discovery paths. Its TXT
++ * identity and feature bitmap remain UxPlay's own, so the client only
++ * negotiates transports and pairing modes that UxPlay actually implements.
++ */
 +static void
-+discovery_registration_options(DNSServiceFlags *flags, uint32_t *interface_index)
++discovery_registration_options(dnssd_t *dnssd_public, DNSServiceFlags *flags,
++                               uint32_t *interface_index)
 +{
 +    *flags = 0;
 +    *interface_index = 0;
 +
 +#ifdef __APPLE__
-+    if (p2p_discovery_profile_enabled()) {
++    /* The Mac research profile implies peer-to-peer registration. */
++    if (dnssd_public->peer_to_peer || mac_wire_discovery_profile_enabled()) {
 +        /*
 +         * Register on the normal infrastructure interfaces and opt into both
 +         * Apple peer-to-peer discovery families.  Pinning the service to
@@ -146,7 +151,7 @@ index 6713753..dc478a6 100644
  
  #if defined(HAVE_LIBDL) && !defined(__APPLE__)
  # define USE_LIBDL 1
-@@ -128,6 +211,7 @@ typedef struct dnssd_private_s {
+@@ -128,6 +204,7 @@ typedef struct dnssd_private_s {
  
  } dnssd_private_t;
  
@@ -154,7 +159,7 @@ index 6713753..dc478a6 100644
  void *
  dnssd_private_init(dnssd_t *dnssd_public, int *error)
  {
-@@ -216,54 +300,77 @@ int
+@@ -216,54 +293,78 @@ int
  dnssd_register_raop(dnssd_t *dnssd_public, unsigned short port)
  {
      char servname[MAX_SERVNAME];
@@ -162,7 +167,8 @@ index 6713753..dc478a6 100644
      char features[22] = {0};
 +    DNSServiceFlags registration_flags = 0;
 +    uint32_t registration_interface = 0;
-+    discovery_registration_options(&registration_flags, &registration_interface);
++    discovery_registration_options(dnssd_public, &registration_flags,
++                                   &registration_interface);
  
      assert(dnssd_public);
      assert(dnssd_public->dnssd_private);
@@ -271,7 +277,7 @@ index 6713753..dc478a6 100644
          return -1;
      }
  
-@@ -277,7 +384,9 @@ dnssd_register_raop(dnssd_t *dnssd_public, unsigned short port)
+@@ -277,7 +378,9 @@ dnssd_register_raop(dnssd_t *dnssd_public, unsigned short port)
      strncat(servname, dnssd_public->name, sizeof(servname)-strlen(servname)-1);
  
      /* Register the service */
@@ -282,13 +288,14 @@ index 6713753..dc478a6 100644
                                                            servname, "_raop._tcp",
                                                            NULL, NULL,
                                                            htons(port),
-@@ -293,46 +402,85 @@ dnssd_register_airplay(dnssd_t *dnssd_public, unsigned short port)
+@@ -293,46 +396,86 @@ dnssd_register_airplay(dnssd_t *dnssd_public, unsigned short port)
  {
      char device_id[3 * MAX_HWADDR_LEN];
      char features[22] = {0};
 +    DNSServiceFlags registration_flags = 0;
 +    uint32_t registration_interface = 0;
-+    discovery_registration_options(&registration_flags, &registration_interface);
++    discovery_registration_options(dnssd_public, &registration_flags,
++                                   &registration_interface);
  
      assert(dnssd_public);
      assert(dnssd_public->dnssd_private);
@@ -394,11 +401,65 @@ index 6713753..dc478a6 100644
                                                             dnssd_public->name, "_airplay._tcp",
                                                             NULL, NULL,
                                                             htons(port),
+diff --git a/lib/dnssd.c b/lib/dnssd.c
+index c3128ca..eb02d80 100644
+--- a/lib/dnssd.c
++++ b/lib/dnssd.c
+@@ -23,6 +23,7 @@
+ #include <ctype.h>
+ 
+ #include "dnssd.h"
++#include "netutils.h"
+ 
+ #include "dnssdint.h"
+ #include "utils.h"
+@@ -146,6 +147,19 @@ uint64_t dnssd_get_airplay_features(dnssd_t *dnssd) {
+     features += (uint64_t) dnssd->features1;
+     return features;
+ }
++void
++dnssd_set_peer_to_peer(dnssd_t *dnssd, int enable)
++{
++    assert(dnssd);
++    dnssd->peer_to_peer = enable ? 1 : 0;
++    /*
++     * Advertising over a peer-to-peer link is useless unless the listening
++     * sockets also accept traffic delivered by it, so the two are set
++     * together. This runs before any socket is created.
++     */
++    netutils_set_peer_to_peer(dnssd->peer_to_peer);
++}
++
+ 
+ void dnssd_set_pk(dnssd_t *dnssd, char * pk_str) {
+     dnssd->pk = pk_str;
+diff --git a/lib/dnssd.h b/lib/dnssd.h
+index b3cae3b..dec21c5 100644
+--- a/lib/dnssd.h
++++ b/lib/dnssd.h
+@@ -47,6 +47,9 @@ typedef struct dnssd_s {
+ 
+     unsigned char pin_pw;
+ 
++    /* publish the service over Apple peer-to-peer links as well */
++    int peer_to_peer;
++
+     void *dnssd_private;
+ } dnssd_t;
+ 
+@@ -69,6 +72,7 @@ DNSSD_API const char *dnssd_get_hw_addr(dnssd_t *dnssd, int *length);
+ DNSSD_API void dnssd_set_airplay_features(dnssd_t *dnssd, int bit, int val);
+ DNSSD_API uint64_t dnssd_get_airplay_features(dnssd_t *dnssd);
+ DNSSD_API void dnssd_set_pk(dnssd_t *dnssd, char * pk_str);
++DNSSD_API void dnssd_set_peer_to_peer(dnssd_t *dnssd, int enable);
+ 
+ DNSSD_API void dnssd_destroy(dnssd_t *dnssd);
+ 
 diff --git a/lib/netutils.c b/lib/netutils.c
-index 726ab13..7285019 100644
+index 726ab13..a661163 100644
 --- a/lib/netutils.c
 +++ b/lib/netutils.c
-@@ -21,6 +21,15 @@
+@@ -21,6 +21,23 @@
  
  #include "compat.h"
  
@@ -411,16 +472,23 @@ index 726ab13..7285019 100644
 +#define SO_RECV_ANYIF 0x1104
 +#endif
 +
++static int peer_to_peer_enabled = 0;
++
++void
++netutils_set_peer_to_peer(int enable)
++{
++    peer_to_peer_enabled = enable ? 1 : 0;
++}
++
  int
  netutils_init()
  {
-@@ -114,6 +123,23 @@ netutils_init_socket(unsigned short *port, int use_ipv6, int use_udp)
+@@ -114,6 +131,22 @@ netutils_init_socket(unsigned short *port, int use_ipv6, int use_udp)
          goto cleanup;
      }
  
 +#if defined(__APPLE__)
-+    const char *awdl_receive = getenv("UXPLAY_AWDL_RECV_ANYIF");
-+    if (awdl_receive && awdl_receive[0] != '\0' && strcmp(awdl_receive, "0") != 0) {
++    if (peer_to_peer_enabled) {
 +        int receive_anyif = 1;
 +        int anyif_ret = setsockopt(
 +            server_fd,
@@ -438,3 +506,65 @@ index 726ab13..7285019 100644
      int ret = setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr, sizeof (reuseaddr));
      if (ret == -1) {
          goto cleanup;
+diff --git a/lib/netutils.h b/lib/netutils.h
+index d6b7542..f4b6d72 100644
+--- a/lib/netutils.h
++++ b/lib/netutils.h
+@@ -19,6 +19,11 @@ int netutils_init();
+ void netutils_cleanup();
+ 
+ int netutils_init_socket(unsigned short *port, int use_ipv6, int use_udp);
++/*
++ * Allow listening sockets to receive traffic delivered over Apple
++ * peer-to-peer (AWDL) links. Call once before any socket is created.
++ */
++void netutils_set_peer_to_peer(int enable);
+ unsigned char *netutils_get_address(void *sockaddr, int *length, unsigned int *zone_id, unsigned short *port);
+ int netutils_parse_address(int family, const char *src, void *dst, int dstlen);
+ 
+diff --git a/uxplay.cpp b/uxplay.cpp
+index e70f8c5..afbcfc1 100644
+--- a/uxplay.cpp
++++ b/uxplay.cpp
+@@ -161,6 +161,7 @@ static std::vector<std::string> allowed_clients;
+ static std::vector<std::string> blocked_clients;
+ static bool restrict_clients;
+ static bool setup_legacy_pairing = false;
++static bool peer_to_peer = false;
+ static unsigned char pin_pw = 0;  /* 0: no client access control; 1: onscreen pin ; 2: require password (same password for all clients)  3: random pw*/
+ static std::string password = "";
+ static guint min_password_length = MIN_PASSWORD_LENGTH;
+@@ -346,6 +347,7 @@ static void log(int level, const char* format, ...) {
+     vprintf(format, vargs);
+     printf("\n");
+     va_end(vargs);
++    fflush(stdout);
+ }
+ 
+ #define LOGD(...) log(LOGGER_DEBUG, __VA_ARGS__)
+@@ -1172,6 +1174,8 @@ static void print_info (char *name) {
+     printf("-md <fn>  In Airplay Audio (ALAC) mode, write metadata text to file <fn>\n");
+     printf("-reset n  Reset after n seconds of client silence (default n=%d, 0=never)\n", MISSED_FEEDBACK_LIMIT);
+     printf("-nofreeze Do NOT leave frozen screen in place after reset\n");
++    printf("-p2p      Also advertise over Apple peer-to-peer (AWDL), so clients\n");
++    printf("          can find and reach UxPlay without a shared network (macOS)\n");
+     printf("-nc       Do NOT  Close video window when client stops mirroring\n");
+     printf("-nc no    Cancel the -nc option (DO close video window) \n");
+     printf("-nohold   Drop current connection when new client connects.\n");
+@@ -1605,6 +1609,8 @@ static void parse_arguments (int argc, char *argv[]) {
+             fprintf(stderr,"The uxplay option \"-t\" has been removed: it was a workaround for an  Avahi issue.\n");
+             fprintf(stderr,"The correct solution is to open network port UDP 5353 in the firewall for mDNS queries\n");
+             exit(1);
++        } else if (arg == "-p2p") {
++            peer_to_peer = true;
+         } else if (arg == "-nc") {
+             new_window_closing_behavior = false;
+             if (i <  argc - 1) {
+@@ -2183,6 +2189,7 @@ static int start_dnssd(std::vector<char> hw_addr, std::string name) {
+         LOGE("Could not initialize dnssd library!: error %d", dnssd_error);
+         return 1;
+     }
++    dnssd_set_peer_to_peer(dnssd, peer_to_peer ? 1 : 0);
+ 
+     /* after dnssd starts, reset the default feature set here 
+      * (overwrites features set in dnssdint.h)

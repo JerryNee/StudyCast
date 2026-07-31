@@ -20,17 +20,22 @@ notices directory at package time.
 | | |
 |---|---|
 | Upstream | https://github.com/FDH2/UxPlay |
-| Upstream release | 1.74 |
-| Upstream base commit | `a73e88c77d7aaa70c1cef0cb31b6407787b9ca1d` |
+| Upstream base commit | `9c24ed264f91948e4a32a51c5f8ade3ece30e58c` |
+| Base commit subject | "README updates for ARM windows (from @christian-fuego)" |
 
-`uxplay-patches/` holds StudyCast's changes as a patch series against that base
+`uxplay-patches/` holds StudyCast's changes as a patch series against that
 commit, so they can be read on their own and replayed onto a newer upstream:
 
 | Patch | What it does |
 |---|---|
-| 0001 | Discovery and reception over Apple peer-to-peer (AWDL). This is what lets a sender reach StudyCast with no network configuration; see [../docs/AWDL_DISCOVERY.md](../docs/AWDL_DISCOVERY.md). |
-| 0002 | Decrypt mirror payloads out of place rather than over the input buffer. |
-| 0003 | AirPlay 2 mirroring research path, disabled by default. Not used by the shipping configuration; see [../docs/AP2_MIRRORING_KEY_SEARCH.md](../docs/AP2_MIRRORING_KEY_SEARCH.md). |
+| 0001 | Continuous MP4 audio capture, which StudyCast's recording depends on. |
+| 0002 | `-p2p`: advertise and accept AirPlay over Apple peer-to-peer. This is what lets a sender reach StudyCast with no network configuration; see [../docs/AWDL_DISCOVERY.md](../docs/AWDL_DISCOVERY.md). |
+| 0003 | Decrypt mirror payloads out of place rather than over the input buffer. |
+| 0004 | AirPlay 2 mirroring research path, off by default. Not used by the shipping configuration; see [../docs/AP2_MIRRORING_KEY_SEARCH.md](../docs/AP2_MIRRORING_KEY_SEARCH.md). |
+
+Patch 0002 is deliberately shaped to be offerable upstream: it adds an
+ordinary option, leaves default behaviour untouched, and carries none of
+StudyCast's own concerns.
 
 ### Updating to a newer upstream
 

@@ -1,0 +1,358 @@
+From 02841be70fde31f08af0d31d85ff9dc0d4703aba Mon Sep 17 00:00:00 2001
+From: Codex <codex@example.com>
+Date: Wed, 24 Jun 2026 18:03:29 -0500
+Subject: [PATCH 1/4] Fix StudyCast continuous MP4 audio capture
+
+---
+ uxplay.cpp | 248 ++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 245 insertions(+), 3 deletions(-)
+
+diff --git a/uxplay.cpp b/uxplay.cpp
+index 4ceaefd..e70f8c5 100644
+--- a/uxplay.cpp
++++ b/uxplay.cpp
+@@ -45,6 +45,8 @@
+ #else
+ #include <csignal>
+ #include <glib-unix.h>
++#include <fcntl.h>
++#include <errno.h>
+ #include <sys/utsname.h>
+ #include <sys/socket.h>
+ #include <ifaddrs.h>
+@@ -202,8 +204,107 @@ static std::string ble_filename = "";
+ static std::string rtp_pipeline = "";
+ static std::string audio_rtp_pipeline = "";
+ static GMainLoop *gmainloop = NULL;
++static bool mux_configured = false;
+ static bool mux_to_file = false;
+ static std::string mux_filename = "recording";
++static std::string mux_control_path = "";
++static bool mux_video_codec_known = false;
++static bool mux_current_video_h265 = false;
++static bool mux_audio_codec_known = false;
++static unsigned char mux_current_audio_ct = 0;
++static std::vector<unsigned char> mux_cached_video_header;
++static bool mux_cached_video_header_h265 = false;
++static bool mux_video_header_needs_inject = false;
++static bool mux_video_started = false;
++
++static void mux_control_write_status(const char *status) {
++    if (mux_control_path.empty()) return;
++
++    std::ofstream out(mux_control_path + ".status", std::ios::out | std::ios::app);
++    if (out.is_open()) {
++        out << status << std::endl;
++    }
++}
++
++static int annexb_start_code_len(const unsigned char *data, int len, int pos) {
++    if (pos + 4 <= len && data[pos] == 0x00 && data[pos + 1] == 0x00 &&
++        data[pos + 2] == 0x00 && data[pos + 3] == 0x01) {
++        return 4;
++    }
++    if (pos + 3 <= len && data[pos] == 0x00 && data[pos + 1] == 0x00 &&
++        data[pos + 2] == 0x01) {
++        return 3;
++    }
++    return 0;
++}
++
++static int annexb_find_start_code(const unsigned char *data, int len, int from) {
++    for (int i = from; i < len - 2; i++) {
++        if (annexb_start_code_len(data, len, i)) return i;
++    }
++    return -1;
++}
++
++static void mux_cache_video_header(const unsigned char *data, int len, bool is_h265) {
++    if (!data || len <= 0) return;
++
++    std::vector<unsigned char> header;
++    int start = annexb_find_start_code(data, len, 0);
++    while (start >= 0) {
++        int sc_len = annexb_start_code_len(data, len, start);
++        int nal = start + sc_len;
++        if (nal >= len) break;
++
++        int next = annexb_find_start_code(data, len, nal + 1);
++        int end = (next >= 0) ? next : len;
++
++        bool is_header_nal = false;
++        if (is_h265) {
++            int nal_type = (data[nal] >> 1) & 0x3f;
++            is_header_nal = (nal_type == 32 || nal_type == 33 || nal_type == 34);
++        } else {
++            int nal_type = data[nal] & 0x1f;
++            is_header_nal = (nal_type == 7 || nal_type == 8);
++        }
++
++        if (is_header_nal) {
++            header.insert(header.end(), data + start, data + end);
++        }
++
++        if (next < 0) break;
++        start = next;
++    }
++
++    if (!header.empty()) {
++        mux_cached_video_header = std::move(header);
++        mux_cached_video_header_h265 = is_h265;
++    }
++}
++
++static bool mux_annexb_contains_keyframe(const unsigned char *data, int len, bool is_h265) {
++    if (!data || len <= 0) return false;
++
++    int start = annexb_find_start_code(data, len, 0);
++    while (start >= 0) {
++        int sc_len = annexb_start_code_len(data, len, start);
++        int nal = start + sc_len;
++        if (nal >= len) break;
++
++        if (is_h265) {
++            int nal_type = (data[nal] >> 1) & 0x3f;
++            if (nal_type >= 16 && nal_type <= 21) return true;
++        } else {
++            int nal_type = data[nal] & 0x1f;
++            if (nal_type == 5) return true;
++        }
++
++        int next = annexb_find_start_code(data, len, nal + 1);
++        if (next < 0) break;
++        start = next;
++    }
++
++    return false;
++}
+ 
+ //Support for D-Bus-based screensaver inhibition (org.freedesktop.ScreenSaver) 
+ static unsigned int scrsv = 0;
+@@ -623,6 +724,72 @@ static gboolean sighup_callback(gpointer loop) {
+ }
+ #endif
+ 
++static void mux_control_start_recording() {
++    if (!mux_configured) {
++        LOGW("recording control ignored: -mp4 was not configured");
++        return;
++    }
++    if (mux_to_file) {
++        LOGI("recording control: already recording");
++        return;
++    }
++
++    mux_to_file = true;
++    mux_video_header_needs_inject = true;
++    mux_video_started = false;
++    LOGI("recording control: start");
++
++    mux_renderer_choose_video_codec(mux_video_codec_known ? mux_current_video_h265 : false);
++    if (mux_audio_codec_known) {
++        mux_renderer_choose_audio_codec(mux_current_audio_ct);
++    }
++    mux_control_write_status("start");
++}
++
++static void mux_control_stop_recording() {
++    if (!mux_to_file) {
++        LOGI("recording control: already stopped");
++        return;
++    }
++
++    mux_to_file = false;
++    mux_video_header_needs_inject = false;
++    mux_video_started = false;
++    mux_renderer_stop();
++    LOGI("recording control: stop");
++    mux_control_write_status("stop");
++}
++
++#ifndef _WIN32
++static gboolean mux_control_callback(GIOChannel *source, GIOCondition condition, gpointer data) {
++    (void)data;
++    if (condition & (G_IO_ERR | G_IO_NVAL)) {
++        LOGE("recording control pipe error");
++        return TRUE;
++    }
++
++    int fd = g_io_channel_unix_get_fd(source);
++    char buffer[256];
++    ssize_t n = 0;
++    while ((n = read(fd, buffer, sizeof(buffer) - 1)) > 0) {
++        buffer[n] = '\0';
++        std::string command(buffer);
++        std::transform(command.begin(), command.end(), command.begin(), [](unsigned char c) {
++            return static_cast<char>(std::tolower(c));
++        });
++
++        if (command.find("start") != std::string::npos) {
++            mux_control_start_recording();
++        }
++        if (command.find("stop") != std::string::npos) {
++            mux_control_stop_recording();
++        }
++    }
++
++    return TRUE;
++}
++#endif
++
+ static void display_progress(uint32_t start, uint32_t curr, uint32_t end) {
+     if (curr < start || curr > end) {
+         return;
+@@ -727,6 +894,28 @@ static void main_loop()  {
+     guint sigterm_watch_id = g_unix_signal_add(SIGTERM, (GSourceFunc) sigterm_callback, (gpointer) loop);
+     guint sigint_watch_id = g_unix_signal_add(SIGINT, (GSourceFunc) sigint_callback, (gpointer) loop);
+     guint sighup_watch_id = g_unix_signal_add(SIGHUP, (GSourceFunc) sigint_callback, (gpointer) loop);
++    int mux_control_fd = -1;
++    guint mux_control_watch_id = 0;
++    GIOChannel *mux_control_channel = NULL;
++    if (!mux_control_path.empty()) {
++        if (mkfifo(mux_control_path.c_str(), 0600) != 0 && errno != EEXIST) {
++            LOGE("recording control: cannot create fifo %s", mux_control_path.c_str());
++        } else {
++            mux_control_fd = open(mux_control_path.c_str(), O_RDWR | O_NONBLOCK);
++            if (mux_control_fd < 0) {
++                LOGE("recording control: cannot open fifo %s", mux_control_path.c_str());
++            } else {
++                mux_control_channel = g_io_channel_unix_new(mux_control_fd);
++                g_io_channel_set_encoding(mux_control_channel, NULL, NULL);
++                g_io_channel_set_buffered(mux_control_channel, FALSE);
++                mux_control_watch_id = g_io_add_watch(mux_control_channel,
++                    (GIOCondition)(G_IO_IN | G_IO_ERR | G_IO_NVAL),
++                    mux_control_callback,
++                    NULL);
++                LOGI("recording control fifo: %s", mux_control_path.c_str());
++            }
++        }
++    }
+ #endif
+     g_main_loop_run(loop);
+ 
+@@ -739,6 +928,9 @@ static void main_loop()  {
+     if (sigint_watch_id > 0) g_source_remove(sigint_watch_id);
+     if (sigterm_watch_id > 0) g_source_remove(sigterm_watch_id);
+     if (sighup_watch_id > 0) g_source_remove(sighup_watch_id);
++    if (mux_control_watch_id > 0) g_source_remove(mux_control_watch_id);
++    if (mux_control_channel) g_io_channel_unref(mux_control_channel);
++    if (mux_control_fd >= 0) close(mux_control_fd);
+ #endif
+ 
+     for (int i = 0; i < n_video_renderers; i++) {
+@@ -914,6 +1106,9 @@ static void print_info (char *name) {
+     printf("-h265     Support h265 (4K) video (with h265 versions of h264 plugins)\n");
+     printf("-mp4 [fn] Record (non-HLS)audio/video to mp4 file \"fn.[n].[format].mp4\"\n");
+     printf("          n=1,2,.. format = H264/5, ALAC/AAC. Default fn=\"recording\"\n");
++    printf("-mp4-control fn  Create/read a local FIFO. With this option, -mp4 is\n");
++    printf("          configured but paused until the FIFO receives \"start\";\n");
++    printf("          receiving \"stop\" finalizes the current mp4 without disconnecting.\n");
+     printf("-hls [v]  Support HTTP Live Streaming (HLS), Youtube app video only: \n");
+     printf("          v = 2 or 3 (default 3) optionally selects video player version\n");
+     printf("-lang xx  HLS language preferences (\"fr:es:..\", overrides $LANGUAGE)\n");
+@@ -1493,6 +1688,7 @@ static void parse_arguments (int argc, char *argv[]) {
+                 }   		
+             }
+         } else if (arg == "-mp4"){
++            mux_configured = true;
+             mux_to_file = true;
+             if (i < argc - 1 && *argv[i+1] != '-') {
+                 mux_filename.erase();
+@@ -1503,6 +1699,15 @@ static void parse_arguments (int argc, char *argv[]) {
+                     exit(1);
+                 }
+             }
++        } else if (arg == "-mp4-control") {
++            if (i < argc - 1 && *argv[i+1] != '-') {
++                mux_control_path.erase();
++                mux_control_path.append(argv[++i]);
++                mux_to_file = false;
++            } else {
++                fprintf(stderr, "option \"-mp4-control <fn>\" requires a fifo path\n");
++                exit(1);
++            }
+         } else if (arg == "-admp") {
+             dump_audio = true;
+             if (i < argc - 1 && *argv[i+1] != '-') {
+@@ -2169,6 +2374,8 @@ extern "C" void video_reset(void *cls, reset_type_t type) {
+ 
+ extern "C" int video_set_codec(void *cls, video_codec_t codec) {
+     bool video_is_h265 = (codec == VIDEO_CODEC_H265);
++    mux_video_codec_known = true;
++    mux_current_video_h265 = video_is_h265;
+     if (mux_to_file) {
+         mux_renderer_choose_video_codec(video_is_h265);
+     }
+@@ -2288,7 +2495,7 @@ extern "C" void audio_process (void *cls, raop_ntp_t *ntp, audio_decode_struct *
+     if (dump_audio) {
+         dump_audio_to_file(data->data, data->data_len, (data->data)[0] & 0xf0);
+     }
+-    if (mux_to_file) {
++    if (mux_to_file && (!use_video || mux_control_path.empty() || mux_video_started)) {
+         mux_renderer_push_audio(data->data, data->data_len, data->ntp_time_remote);
+     }
+     if (use_audio) {
+@@ -2320,11 +2527,40 @@ extern "C" void audio_process (void *cls, raop_ntp_t *ntp, audio_decode_struct *
+ }
+ 
+ extern "C" void video_process (void *cls, raop_ntp_t *ntp, video_decode_struct *data) {
++    mux_cache_video_header(data->data, data->data_len, data->is_h265);
+     if (dump_video) {
+         dump_video_to_file(data->data, data->data_len);
+     }
+     if (mux_to_file) {
+-        mux_renderer_push_video(data->data, data->data_len, data->ntp_time_remote);
++        if (mux_video_header_needs_inject) {
++            if (mux_annexb_contains_keyframe(data->data, data->data_len, data->is_h265) &&
++                (mux_cached_video_header.empty() || mux_cached_video_header_h265 != data->is_h265)) {
++                LOGW("recording control: starting on keyframe without cached codec header");
++                mux_renderer_push_video(data->data, data->data_len, data->ntp_time_remote);
++                mux_video_started = true;
++                mux_video_header_needs_inject = false;
++            } else if (mux_annexb_contains_keyframe(data->data, data->data_len, data->is_h265) &&
++                       !mux_cached_video_header.empty() &&
++                       mux_cached_video_header_h265 == data->is_h265) {
++                std::vector<unsigned char> first_video_buffer;
++                first_video_buffer.reserve(mux_cached_video_header.size() + data->data_len);
++                first_video_buffer.insert(first_video_buffer.end(),
++                                          mux_cached_video_header.begin(),
++                                          mux_cached_video_header.end());
++                first_video_buffer.insert(first_video_buffer.end(),
++                                          data->data,
++                                          data->data + data->data_len);
++                mux_renderer_push_video(first_video_buffer.data(),
++                                        (int)first_video_buffer.size(),
++                                        data->ntp_time_remote);
++                mux_video_header_needs_inject = false;
++                mux_video_started = true;
++                LOGI("recording control: started recording on keyframe with cached codec header");
++            }
++        } else {
++            mux_renderer_push_video(data->data, data->data_len, data->ntp_time_remote);
++            mux_video_started = true;
++        }
+     }
+     if (use_video) {
+         if (!remote_clock_offset) {
+@@ -2448,6 +2684,8 @@ extern "C" void audio_get_format (void *cls, unsigned char *ct, unsigned short *
+         audio_dumpfile = NULL;
+     }
+     audio_type = type;
++    mux_audio_codec_known = true;
++    mux_current_audio_ct = *ct;
+     
+     if (use_audio) {
+       audio_renderer_start(ct);
+@@ -3146,7 +3384,11 @@ int main (int argc, char *argv[]) {
+ #endif
+     }
+ 
+-    if (mux_to_file) {
++    if (!mux_control_path.empty() && mux_configured) {
++        mux_to_file = false;
++    }
++
++    if (mux_configured) {
+         mux_renderer_init(render_logger, mux_filename.c_str(), use_audio, use_video);
+     }
+ 

@@ -23,6 +23,7 @@
 #include <ctype.h>
 
 #include "dnssd.h"
+#include "netutils.h"
 
 #include "dnssdint.h"
 #include "utils.h"
@@ -146,6 +147,19 @@ uint64_t dnssd_get_airplay_features(dnssd_t *dnssd) {
     features += (uint64_t) dnssd->features1;
     return features;
 }
+void
+dnssd_set_peer_to_peer(dnssd_t *dnssd, int enable)
+{
+    assert(dnssd);
+    dnssd->peer_to_peer = enable ? 1 : 0;
+    /*
+     * Advertising over a peer-to-peer link is useless unless the listening
+     * sockets also accept traffic delivered by it, so the two are set
+     * together. This runs before any socket is created.
+     */
+    netutils_set_peer_to_peer(dnssd->peer_to_peer);
+}
+
 
 void dnssd_set_pk(dnssd_t *dnssd, char * pk_str) {
     dnssd->pk = pk_str;
