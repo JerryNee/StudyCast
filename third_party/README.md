@@ -29,13 +29,15 @@ commit, so they can be read on their own and replayed onto a newer upstream:
 | Patch | What it does |
 |---|---|
 | 0001 | Continuous MP4 audio capture, which StudyCast's recording depends on. |
-| 0002 | `-p2p`: advertise and accept AirPlay over Apple peer-to-peer. This is what lets a sender reach StudyCast with no network configuration; see [../docs/AWDL_DISCOVERY.md](../docs/AWDL_DISCOVERY.md). |
-| 0003 | Decrypt mirror payloads out of place rather than over the input buffer. |
-| 0004 | AirPlay 2 mirroring research path, off by default. Not used by the shipping configuration; see [../docs/AP2_MIRRORING_KEY_SEARCH.md](../docs/AP2_MIRRORING_KEY_SEARCH.md). |
+| 0002 | Ignore in-source cmake build output. Split out so 0003 touches only sources. |
+| 0003 | `-p2p`: advertise and accept AirPlay over Apple peer-to-peer. This is what lets a sender reach StudyCast with no network configuration; see [../docs/AWDL_DISCOVERY.md](../docs/AWDL_DISCOVERY.md). |
+| 0004 | Decrypt mirror payloads out of place rather than over the input buffer. |
+| 0005 | AirPlay 2 mirroring research path, off by default. Not used by the shipping configuration; see [../docs/AP2_MIRRORING_KEY_SEARCH.md](../docs/AP2_MIRRORING_KEY_SEARCH.md). |
 
-Patch 0002 is deliberately shaped to be offerable upstream: it adds an
+Patch 0003 is deliberately shaped to be offerable upstream: it adds an
 ordinary option, leaves default behaviour untouched, and carries none of
-StudyCast's own concerns.
+StudyCast's own concerns. [../docs/UPSTREAM_PR.md](../docs/UPSTREAM_PR.md) has
+everything needed to submit it.
 
 ### Updating to a newer upstream
 

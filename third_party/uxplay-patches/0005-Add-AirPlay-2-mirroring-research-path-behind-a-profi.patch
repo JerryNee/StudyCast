@@ -1,7 +1,7 @@
-From 0b6e760d40db1416a67116c8d6c97d7ee010ad46 Mon Sep 17 00:00:00 2001
+From 1d288fc2977f37353eada8ed9367f055c56e73f0 Mon Sep 17 00:00:00 2001
 From: JerryNee <ni12@illinois.edu>
-Date: Fri, 31 Jul 2026 17:21:27 -0500
-Subject: [PATCH 4/4] Add AirPlay 2 mirroring research path behind a profile
+Date: Fri, 31 Jul 2026 17:36:52 -0500
+Subject: [PATCH 5/5] Add AirPlay 2 mirroring research path behind a profile
 
 Impersonating a Mac receiver (a Mac model string, a modern srcvers and the
 HomeKit pairing endpoints) is another way to be offered over Apple

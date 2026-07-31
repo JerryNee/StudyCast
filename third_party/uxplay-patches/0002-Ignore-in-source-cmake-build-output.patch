@@ -1,0 +1,31 @@
+From 4a15fc7e4636c6fb2e08d5661470003c77dc1fd5 Mon Sep 17 00:00:00 2001
+From: JerryNee <ni12@illinois.edu>
+Date: Fri, 31 Jul 2026 17:36:35 -0500
+Subject: [PATCH 2/5] Ignore in-source cmake build output
+
+Building with `cmake .` in the source root leaves object directories, a
+generated Makefile and static libraries next to the sources, where they are
+easy to commit by accident.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ .gitignore | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/.gitignore b/.gitignore
+index 01f9cb9..404443d 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,2 +1,10 @@
+ build/
+-.vscode/
+\ No newline at end of file
++.vscode/
++# in-source cmake build artifacts
++CMakeCache.txt
++CMakeFiles/
++cmake_install.cmake
++cmake_uninstall.cmake
++Makefile
++*.a
++/uxplay

@@ -1,7 +1,7 @@
-From 02841be70fde31f08af0d31d85ff9dc0d4703aba Mon Sep 17 00:00:00 2001
+From 2428b84c206e00b7d2259e3357861e640a34c4a3 Mon Sep 17 00:00:00 2001
 From: Codex <codex@example.com>
 Date: Wed, 24 Jun 2026 18:03:29 -0500
-Subject: [PATCH 1/4] Fix StudyCast continuous MP4 audio capture
+Subject: [PATCH 1/5] Fix StudyCast continuous MP4 audio capture
 
 ---
  uxplay.cpp | 248 ++++++++++++++++++++++++++++++++++++++++++++++++++++-

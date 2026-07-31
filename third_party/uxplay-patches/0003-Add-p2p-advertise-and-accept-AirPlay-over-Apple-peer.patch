@@ -1,15 +1,16 @@
-From a63d2a3105e03ce9f774f8f6d13c8d29bee340cc Mon Sep 17 00:00:00 2001
+From b4faa4382baa6200b71dabf6869f28306bdf286d Mon Sep 17 00:00:00 2001
 From: JerryNee <ni12@illinois.edu>
-Date: Fri, 31 Jul 2026 17:21:10 -0500
-Subject: [PATCH 2/4] Add -p2p: advertise and accept AirPlay over Apple
+Date: Fri, 31 Jul 2026 17:36:35 -0500
+Subject: [PATCH 3/5] Add -p2p: advertise and accept AirPlay over Apple
  peer-to-peer
 
 A receiver published only on the infrastructure interfaces depends on the
 network it sits on. Managed networks filter or proxy mDNS, and many isolate
 clients from each other, so UxPlay is invisible or unreachable on exactly the
 networks where a shared display is most useful -- the recurring complaint in
-issues #234 and #163. Publishing over AWDL as well lets a client reach UxPlay
-directly, needing neither a shared network nor cooperation from its operator.
+issues #234 and antimof#163. Publishing over AWDL as well lets a client reach
+UxPlay directly, needing neither a shared network nor cooperation from its
+operator.
 
 Two things are required, and neither works alone:
 
@@ -23,47 +24,33 @@ Two things are required, and neither works alone:
   appears in the client's list but the server never sees the connection --
   no bytes on the port, nothing logged, just a client that cannot connect.
 
-Both are off unless -p2p is given, so default behaviour is unchanged: without
-the option the service still resolves to the host's own name, with it to the
-randomized UUID name mDNSResponder publishes for peer-to-peer registrations.
+Enabling one without the other is useless, so dnssd_set_peer_to_peer() sets
+both. Both are off unless -p2p is given, and default behaviour is unchanged:
+without the option the service still resolves to the host's own name, with it
+to the randomized UUID name mDNSResponder publishes for peer-to-peer
+registrations.
 
 SO_RECV_ANYIF is not in the public SDK headers; the value is taken from XNU's
-private socket.h. That is the reason this is opt-in and macOS-only. Note the
-scope: this makes UxPlay findable and reachable over an AWDL link. It does
-not implement Apple's peer-to-peer AirPlay handshake -- the media session is
-the ordinary one, over that link instead of the infrastructure network.
+private socket.h. That is the reason this is opt-in and macOS-only.
 
-Also flush the log line as it is written, so output stays readable when
+Note the scope: this makes UxPlay findable and reachable over an AWDL link.
+It does not implement Apple's peer-to-peer AirPlay handshake -- the media
+session is the ordinary one, carried over that link instead of the
+infrastructure network.
+
+Also flush each log line as it is written, so output stays readable when
 stdout is a pipe rather than a terminal.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 ---
- .gitignore          |  10 +-
  lib/dns_sd/dns_sd.c | 275 +++++++++++++++++++++++++++++++++-----------
  lib/dnssd.c         |  14 +++
  lib/dnssd.h         |   4 +
  lib/netutils.c      |  33 ++++++
  lib/netutils.h      |   5 +
  uxplay.cpp          |   7 ++
- 7 files changed, 281 insertions(+), 67 deletions(-)
+ 6 files changed, 272 insertions(+), 66 deletions(-)
 
-diff --git a/.gitignore b/.gitignore
-index 01f9cb9..404443d 100644
---- a/.gitignore
-+++ b/.gitignore
-@@ -1,2 +1,10 @@
- build/
--.vscode/
-\ No newline at end of file
-+.vscode/
-+# in-source cmake build artifacts
-+CMakeCache.txt
-+CMakeFiles/
-+cmake_install.cmake
-+cmake_uninstall.cmake
-+Makefile
-+*.a
-+/uxplay
 diff --git a/lib/dns_sd/dns_sd.c b/lib/dns_sd/dns_sd.c
 index 6713753..241c329 100644
 --- a/lib/dns_sd/dns_sd.c

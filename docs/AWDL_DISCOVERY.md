@@ -63,6 +63,9 @@ mDNSResponder 为点对点注册发布的随机 UUID 名字。
 
 该路线保留为研究项，默认关闭，见 [AP2_MIRRORING_KEY_SEARCH.md](AP2_MIRRORING_KEY_SEARCH.md)。
 
+第 2.1、2.2 两处改动本身与 StudyCast 无关，已整理成可提给 UxPlay 上游的独立
+补丁，材料见 [UPSTREAM_PR.md](UPSTREAM_PR.md)。
+
 ## 4. 已验证与未验证
 
 已验证：
