@@ -103,6 +103,12 @@ struct ContentView: View {
                 }
                 .disabled(model.isProjecting)
             }
+            field("Discovery") {
+                Toggle("AP2 research mode (1)", isOn: $model.macWireIdentityEnabled)
+                    .toggleStyle(.switch)
+                    .disabled(model.isProjecting)
+                    .help("研究用途：让 Station 1 伪装成系统 Mac 接收器。它同样能拿到 AWDL，但发送端会改走 AP2 媒体协议、不发 ekey，画面无法解密——只用于采集 AP2 密钥样本。日常投屏请保持关闭。")
+            }
             Spacer()
             if model.currentSessionDir != nil {
                 Button("Show in Finder") { model.revealOutputInFinder() }
@@ -421,6 +427,9 @@ private struct StationTile: View {
             HStack(spacing: 4) {
                 Text("镜像选:").font(.caption2).foregroundStyle(.secondary)
                 Text(station.airplayName).font(.caption2.monospaced())
+                Text("配对码").font(.caption2).foregroundStyle(.secondary)
+                Text(station.pairingPIN).font(.caption2.monospaced())
+                    .textSelection(.enabled)
                 Spacer()
                 maximizeButton(foregroundStyle: isMaximized ? Color.accentColor : Color.secondary)
                 Circle().fill(dotColor).frame(width: 8, height: 8)

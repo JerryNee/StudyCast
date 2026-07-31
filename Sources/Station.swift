@@ -47,6 +47,14 @@ final class Station: ObservableObject, Identifiable {
     var mac: String { String(format: "02:00:00:00:00:%02X", index + 1) }
     var mediaPorts: StationMediaPorts { StationMediaPorts(stationIndex: index) }
 
+    /// AirPlay pairing code the sender is asked for.
+    ///
+    /// UxPlay only turns on feature bit 27 ("supports legacy pairing") when a
+    /// PIN is configured, and that bit is part of what makes senders offer the
+    /// receiver over Apple peer-to-peer. One memorable code per station also
+    /// keeps a room full of senders from casting to the wrong screen.
+    var pairingPIN: String { String(repeating: "\(index + 1)", count: 4) }
+
     init(index: Int, label: String, audioOutputManager: AudioOutputManager) {
         self.index = index
         self.label = label
@@ -57,6 +65,7 @@ final class Station: ObservableObject, Identifiable {
     }
 
     func startProjection(uxplayPath: String,
+                         useMacWireIdentity: Bool,
                          stagingBase: URL,
                          destinationBase: URL,
                          onError: @escaping (String) -> Void) {
@@ -72,8 +81,14 @@ final class Station: ObservableObject, Identifiable {
                            name: airplayName,
                            basePort: basePort,
                            mac: mac,
+                           pairingPIN: pairingPIN,
+                           useMacWireIdentity: useMacWireIdentity,
                            mediaPorts: mediaPorts,
-                           mp4Base: stagingBase)
+                           mp4Base: stagingBase,
+                           onStreamingChanged: { [weak self] streaming in
+                               guard let self, !streaming else { return }
+                               self.preview.clearFrame()
+                           })
             state = .projecting
         } catch {
             preview.stop()
@@ -184,17 +199,27 @@ final class Station: ObservableObject, Identifiable {
             return lhsDate > rhsDate
         }
 
-        guard let recorded = candidates.first else { return nil }
+        // UxPlay starts a new numbered MP4 every time a sender connects, so a
+        // single projection run produces one segment per cast. Keep them all:
+        // taking only the newest silently discarded everything recorded before
+        // a sender dropped and reconnected. The staging name already carries
+        // the segment number, so the destination names stay distinct.
+        var moved: [URL] = []
+        for recorded in candidates {
+            let suffix = String(
+                recorded.lastPathComponent.dropFirst(stagingBase.lastPathComponent.count))
+            let masterURL = destinationBase.deletingLastPathComponent()
+                .appendingPathComponent(destinationBase.lastPathComponent + ".master" + suffix)
 
-        let suffix = String(recorded.lastPathComponent.dropFirst(stagingBase.lastPathComponent.count))
-        let masterURL = destinationBase.deletingLastPathComponent()
-            .appendingPathComponent(destinationBase.lastPathComponent + ".master" + suffix)
-
-        if fm.fileExists(atPath: masterURL.path) {
-            try fm.removeItem(at: masterURL)
+            if fm.fileExists(atPath: masterURL.path) {
+                try fm.removeItem(at: masterURL)
+            }
+            try fm.moveItem(at: recorded, to: masterURL)
+            moved.append(masterURL)
         }
-        try fm.moveItem(at: recorded, to: masterURL)
-        return masterURL
+
+        // Sorted newest first, so this is the segment clip trimming works from.
+        return moved.first
     }
 
     private func runFFmpegTrim(input: URL, output: URL, offset: TimeInterval, duration: TimeInterval) throws {
@@ -303,15 +328,17 @@ final class Station: ObservableObject, Identifiable {
         guard let stagingBase, let destinationBase else { return }
 
         let fm = FileManager.default
-        let stagingLog = URL(fileURLWithPath: stagingBase.path + ".uxplay.log")
-        guard fm.fileExists(atPath: stagingLog.path) else { return }
+        for suffix in [UxPlayProcess.logSuffix, UxPlayProcess.ap2CaptureSuffix] {
+            let staged = URL(fileURLWithPath: stagingBase.path + suffix)
+            guard fm.fileExists(atPath: staged.path) else { continue }
 
-        let finalLog = destinationBase.deletingLastPathComponent()
-            .appendingPathComponent(destinationBase.lastPathComponent + ".uxplay.log")
-        if fm.fileExists(atPath: finalLog.path) {
-            try fm.removeItem(at: finalLog)
+            let final = destinationBase.deletingLastPathComponent()
+                .appendingPathComponent(destinationBase.lastPathComponent + suffix)
+            if fm.fileExists(atPath: final.path) {
+                try fm.removeItem(at: final)
+            }
+            try fm.moveItem(at: staged, to: final)
         }
-        try fm.moveItem(at: stagingLog, to: finalLog)
     }
 
     private func processEnvironment() -> [String: String] {

@@ -13,6 +13,7 @@ final class AppModel: ObservableObject {
     @Published var uxplayPath: String = AppModel.defaultUxplayPath
     @Published var outputDirectory: URL = AppModel.defaultOutputDirectory
     @Published var stations: [Station]
+    @Published var macWireIdentityEnabled = false
     @Published private(set) var isProjecting = false
     @Published private(set) var isRecording = false
     @Published private(set) var currentSessionDir: URL?
@@ -93,6 +94,7 @@ final class AppModel: ObservableObject {
             let stagingBase = stagingDir.appendingPathComponent("s\(station.index)")
             let destBase = destDir.appendingPathComponent("\(station.index + 1)_\(sanitize(station.label))")
             station.startProjection(uxplayPath: uxplayPath,
+                                    useMacWireIdentity: macWireIdentityEnabled && station.index == 0,
                                     stagingBase: stagingBase,
                                     destinationBase: destBase,
                                     onError: { [weak self] message in
