@@ -23,6 +23,12 @@ final class AppModel: ObservableObject {
 
     private var currentStagingDir: URL?
 
+    /// Last-resort helper path, used only when no helper was bundled.
+    ///
+    /// A stock Homebrew uxplay will run, but it is not the vendored build in
+    /// `third_party/UxPlay`, so it cannot be reached over Apple peer-to-peer --
+    /// stations fall back to whatever the local network allows. Build the
+    /// vendored tree, or point UXPLAY_PATH at a build of it.
     static let defaultUxplayPath = ProcessInfo.processInfo.environment["UXPLAY_PATH"]
         ?? "/opt/homebrew/bin/uxplay"
 
@@ -68,7 +74,10 @@ final class AppModel: ObservableObject {
             lastError = """
             找不到可执行的 uxplay。
             Release builds expect StudyCast.app/Contents/Helpers/uxplay.
-            Source builds can set UXPLAY_PATH or install uxplay at /opt/homebrew/bin/uxplay.
+            Source builds should build the vendored helper:
+              cd third_party/UxPlay && cmake . && make
+            or set UXPLAY_PATH to a build of that tree. A stock Homebrew
+            uxplay lacks the peer-to-peer changes stations rely on.
             """
             return
         }

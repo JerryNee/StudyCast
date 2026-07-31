@@ -5,7 +5,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 : "${RELEASE_VERSION:?Set RELEASE_VERSION, for example 0.1.0-beta.2}"
-: "${UXPLAY_SOURCE_DIR:?Set UXPLAY_SOURCE_DIR to the exact UxPlay source tree used for this release}"
+
+# UxPlay is vendored, so a release normally ships the tree in this repository.
+# Both may still be overridden to package a helper built somewhere else.
+VENDORED_UXPLAY_DIR="${REPO_ROOT}/third_party/UxPlay"
+UXPLAY_SOURCE_DIR="${UXPLAY_SOURCE_DIR:-${VENDORED_UXPLAY_DIR}}"
+if [[ -z "${UXPLAY_COMMIT:-}" ]]; then
+  # Identify the vendored helper by the commit that last changed it.
+  UXPLAY_COMMIT="$(git -C "${REPO_ROOT}" log -1 --format=%h -- third_party/UxPlay)"
+fi
 : "${UXPLAY_COMMIT:?Set UXPLAY_COMMIT to the exact UxPlay commit used for this release}"
 
 SIGNING_MODE="${SIGNING_MODE:-developer-id}"
@@ -94,7 +102,15 @@ else
 fi
 
 git archive --format=tar.gz --prefix="StudyCast-${RELEASE_VERSION}/" HEAD > "${SOURCE_TARBALL}"
-if git -C "${UXPLAY_SOURCE_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+if [[ "${UXPLAY_SOURCE_DIR}" -ef "${VENDORED_UXPLAY_DIR}" ]]; then
+  # The vendored tree lives inside this repository, so archive it as a subtree
+  # of HEAD. Asking git for an upstream UxPlay commit would fail here: that
+  # object does not exist in this repository.
+  git -C "${REPO_ROOT}" archive \
+    --format=tar.gz \
+    --prefix="UxPlay-${UXPLAY_COMMIT}/" \
+    HEAD:third_party/UxPlay > "${UXPLAY_TARBALL}"
+elif git -C "${UXPLAY_SOURCE_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   git -C "${UXPLAY_SOURCE_DIR}" archive \
     --format=tar.gz \
     --prefix="UxPlay-${UXPLAY_COMMIT}/" \
