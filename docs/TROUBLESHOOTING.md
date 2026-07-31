@@ -3,9 +3,20 @@
 ## AirPlay Target Does Not Appear
 
 - Confirm StudyCast has Local Network permission in System Settings.
-- Keep the Mac and device on the same network and VLAN.
+- Keep Wi-Fi on for both devices. Stations are published over Apple
+  peer-to-peer (AWDL), which needs the Wi-Fi radio even when the sender is on
+  another network. Joining the same network or VLAN is not required.
 - Stop other AirPlay receiver apps before starting projection.
 - Restart projection so StudyCast can publish fresh receiver names.
+
+## AirPlay Target Appears But Will Not Connect
+
+- The sender is asking for the station's pairing code. Each station shows its
+  own four-digit code next to the receiver name: `1111`, `2222`, `3333`.
+- If the sender reports a connection failure without prompting for a code,
+  check `SO_RECV_ANYIF` support in the UxPlay helper — see
+  [AWDL_DISCOVERY.md](AWDL_DISCOVERY.md). A receiver that is visible but never
+  sees an incoming connection is the signature of that option being missing.
 
 ## Projection Starts But No Preview Appears
 

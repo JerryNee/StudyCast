@@ -48,9 +48,14 @@ This preview DMG is ad-hoc signed but not Apple Developer ID signed or notarized
 2. Open the DMG and drag StudyCast into Applications.
 3. Launch StudyCast once. If macOS blocks it, open **System Settings > Privacy & Security** and choose **Open Anyway**.
 4. Relaunch StudyCast and allow Local Network access.
-5. Click **Start Projection**, then choose a `StudyCast-N` AirPlay target from each device.
+5. Click **Start Projection**, then choose a `StudyCast-N` AirPlay target from each device and enter the four-digit pairing code shown beside that station's name.
 6. Click **Start Recording** and **Stop Recording** to mark clips.
 7. Click **Stop Projection** to finalize the MP4 files.
+
+Stations are published over Apple peer-to-peer (AWDL) as well as the local
+network, so senders can reach StudyCast without joining the same network and
+without the network operator registering the Mac. See
+[docs/AWDL_DISCOVERY.md](docs/AWDL_DISCOVERY.md).
 
 ## Release Builds
 
