@@ -1,0 +1,608 @@
+From 75c8b530bbaf24a3857b946a41d724191d5c4741 Mon Sep 17 00:00:00 2001
+From: JerryNee <ni12@illinois.edu>
+Date: Fri, 31 Jul 2026 16:35:35 -0500
+Subject: [PATCH 1/3] Discover and accept AirPlay over Apple peer-to-peer
+
+A receiver that is only published on the infrastructure interfaces depends on
+the network operator: managed networks filter or proxy mDNS, and some isolate
+clients from each other. Publishing over AWDL as well lets a sender reach the
+receiver directly, with no network configuration and no device registration.
+
+Two things are needed, and neither works without the other:
+
+- Register with kDNSServiceFlagsIncludeP2P | kDNSServiceFlagsIncludeAWDL on
+  kDNSServiceInterfaceIndexAny. Pinning the registration to awdl0 instead
+  hides the service from clients using other peer-to-peer interfaces, which
+  is why earlier IncludeP2P experiments looked like a dead end.
+
+- Set SO_RECV_ANYIF on the listening sockets. A conventional BSD listener
+  silently drops packets delivered over AWDL, so without it the receiver is
+  visible in the sender's list but the service never sees the connection at
+  all -- no bytes, no log line, just "unable to connect".
+
+Both are opt-in so default UxPlay networking is unchanged:
+UXPLAY_DISCOVERY_PROFILE selects the registration profile and
+UXPLAY_AWDL_RECV_ANYIF enables the socket option.
+
+Note that mDNSResponder publishes a randomized UUID hostname for
+peer-to-peer registrations. That is expected Apple behaviour, not a fault;
+the name resolves over the AWDL link.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ .gitignore          |  10 +-
+ lib/dns_sd/dns_sd.c | 429 +++++++++++++++++++++++++++++++++++++-------
+ lib/netutils.c      |  26 +++
+ 3 files changed, 397 insertions(+), 68 deletions(-)
+
+diff --git a/.gitignore b/.gitignore
+index 01f9cb9..404443d 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,2 +1,10 @@
+ build/
+-.vscode/
+\ No newline at end of file
++.vscode/
++# in-source cmake build artifacts
++CMakeCache.txt
++CMakeFiles/
++cmake_install.cmake
++cmake_uninstall.cmake
++Makefile
++*.a
++/uxplay
+diff --git a/lib/dns_sd/dns_sd.c b/lib/dns_sd/dns_sd.c
+index 6713753..97ea803 100644
+--- a/lib/dns_sd/dns_sd.c
++++ b/lib/dns_sd/dns_sd.c
+@@ -20,6 +20,13 @@
+ #include <stdio.h>
+ #include <assert.h>
+ 
++#ifdef __APPLE__
++#include <arpa/inet.h>
++#include <ifaddrs.h>
++#include <net/if.h>
++#include <netinet/in.h>
++#endif
++
+ #include "../compat.h"
+ #include <dns_sd.h>
+ #include "../dnssd.h"
+@@ -28,6 +35,115 @@
+ 
+ #define MAX_DEVICEID 18
+ #define MAX_SERVNAME 256
++#define DISCOVERY_PROFILE_ENV "UXPLAY_DISCOVERY_PROFILE"
++#define P2P_DISCOVERY_PROFILE "p2p"
++#define MAC_WIRE_DISCOVERY_PROFILE "mac-wire"
++#define MAC_P2P_DISCOVERY_PROFILE "mac-p2p"
++#define MAC_P2P_LEGACY_DISCOVERY_PROFILE "mac-p2p-legacy"
++/*
++ * The sender picks its transport from the advertised feature bitmap and its
++ * media protocol from the /info response.  "mac-p2p" wins AWDL but then uses
++ * the AP2 media path (no ekey, undocumented key derivation); "mac-p2p-legacy"
++ * gets the ekey path back but loses AWDL and falls onto infrastructure Wi-Fi.
++ * The hybrid advertises the modern Mac bitmap over Bonjour, so the sender
++ * still chooses peer-to-peer, while /info reports UxPlay's own feature set so
++ * it negotiates the legacy FairPlay media setup UxPlay can actually decrypt.
++ */
++#define MAC_P2P_HYBRID_DISCOVERY_PROFILE "mac-p2p-hybrid"
++#define MAC_P2P_BRIDGE_HOST "StudyCast-AirPlay-Bridge.local."
++#define MAC_WIRE_DEVICEID "B2:F7:FD:F9:AC:EE"
++#define MAC_WIRE_FEATURES "0x5A7FFEE6,0x381607DE"
++#define MAC_WIRE_LEGACY_FEATURES "0x527FFEE6,0x0"
++#define MAC_WIRE_MODEL "Mac15,6"
++#define MAC_WIRE_SRCVERS "980.63.2"
++#define MAC_WIRE_FLAGS "0x4"
++#define MAC_WIRE_FEX "1c9/St5PFzg2IYxA"
++#define MAC_WIRE_GID "5C7D1D2E-79F8-4D9C-9D1A-5B7556D10006"
++#define MAC_WIRE_PI "5c7d1d2e-79f8-4d9c-9d1a-5b7556d10006"
++#define MAC_WIRE_PSI "02000000-0006-4A4D-9000-000000000006"
++
++/*
++ * Opt selected receivers into Apple's peer-to-peer Bonjour discovery paths.
++ * Their TXT identity and feature bitmap remain UxPlay's own so the client only
++ * negotiates transports and pairing modes that UxPlay actually implements.
++ */
++static int
++p2p_discovery_profile_enabled(void)
++{
++    const char *profile = getenv(DISCOVERY_PROFILE_ENV);
++    return profile && (!strcmp(profile, P2P_DISCOVERY_PROFILE)
++                       || !strcmp(profile, MAC_P2P_DISCOVERY_PROFILE)
++                       || !strcmp(profile,
++                                  MAC_P2P_LEGACY_DISCOVERY_PROFILE)
++                       || !strcmp(profile,
++                                  MAC_P2P_HYBRID_DISCOVERY_PROFILE));
++}
++
++static int
++mac_wire_discovery_profile_enabled(void)
++{
++    const char *profile = getenv(DISCOVERY_PROFILE_ENV);
++    return profile && (!strcmp(profile, MAC_WIRE_DISCOVERY_PROFILE)
++                       || !strcmp(profile, MAC_P2P_DISCOVERY_PROFILE)
++                       || !strcmp(profile,
++                                  MAC_P2P_LEGACY_DISCOVERY_PROFILE)
++                       || !strcmp(profile,
++                                  MAC_P2P_HYBRID_DISCOVERY_PROFILE));
++}
++
++static int
++mac_p2p_discovery_profile_enabled(void)
++{
++    const char *profile = getenv(DISCOVERY_PROFILE_ENV);
++    return profile && !strcmp(profile, MAC_P2P_DISCOVERY_PROFILE);
++}
++
++static int
++mac_p2p_legacy_discovery_profile_enabled(void)
++{
++    const char *profile = getenv(DISCOVERY_PROFILE_ENV);
++    return profile &&
++        !strcmp(profile, MAC_P2P_LEGACY_DISCOVERY_PROFILE);
++}
++
++/*
++ * The sender reads this bitmap to decide both whether to use Apple
++ * peer-to-peer and whether to negotiate the AP2 media setup.  Those look like
++ * separate bits, so allow the exact value to be set from the environment:
++ * bisecting it is far cheaper than reverse-engineering the AP2 media key.
++ * Format matches the TXT record, e.g. "0x5A7FFEE6,0x381607DE".
++ */
++static const char *
++mac_wire_features(void)
++{
++    const char *override = getenv("UXPLAY_MAC_FEATURES");
++    if (override && override[0]) {
++        return override;
++    }
++    return mac_p2p_legacy_discovery_profile_enabled()
++        ? MAC_WIRE_LEGACY_FEATURES
++        : MAC_WIRE_FEATURES;
++}
++
++static void
++discovery_registration_options(DNSServiceFlags *flags, uint32_t *interface_index)
++{
++    *flags = 0;
++    *interface_index = 0;
++
++#ifdef __APPLE__
++    if (p2p_discovery_profile_enabled()) {
++        /*
++         * Register on the normal infrastructure interfaces and opt into both
++         * Apple peer-to-peer discovery families.  Pinning the service to
++         * awdl0 hid it from clients currently using newer P2P interfaces such
++         * as anri0/en17.
++         */
++        *interface_index = kDNSServiceInterfaceIndexAny;
++        *flags = kDNSServiceFlagsIncludeP2P | kDNSServiceFlagsIncludeAWDL;
++    }
++#endif
++}
+ 
+ #if defined(HAVE_LIBDL) && !defined(__APPLE__)
+ # define USE_LIBDL 1
+@@ -126,8 +242,111 @@ typedef struct dnssd_private_s {
+     DNSServiceRef raop_service;
+     DNSServiceRef airplay_service;
+ 
++#ifdef __APPLE__
++    DNSServiceRef bridge_connection;
++    DNSRecordRef bridge_ipv4_record;
++#endif
++
+ } dnssd_private_t;
+ 
++#ifdef __APPLE__
++static void DNSSD_API
++bridge_record_reply(DNSServiceRef sd_ref, DNSRecordRef record_ref,
++                    DNSServiceFlags flags, DNSServiceErrorType error_code,
++                    void *context)
++{
++    (void) sd_ref;
++    (void) record_ref;
++    (void) flags;
++    (void) context;
++    if (error_code != kDNSServiceErr_NoError) {
++        fprintf(stderr, "StudyCast bridge A record failed: %d\n", error_code);
++    }
++}
++
++static int
++en0_ipv4_address(struct in_addr *address)
++{
++    struct ifaddrs *interfaces = NULL;
++    if (getifaddrs(&interfaces) != 0) {
++        return -1;
++    }
++
++    int result = -1;
++    for (struct ifaddrs *interface = interfaces;
++         interface;
++         interface = interface->ifa_next) {
++        if (!interface->ifa_addr
++            || interface->ifa_addr->sa_family != AF_INET
++            || strcmp(interface->ifa_name, "en0")) {
++            continue;
++        }
++        *address = ((struct sockaddr_in *) interface->ifa_addr)->sin_addr;
++        result = 0;
++        break;
++    }
++
++    freeifaddrs(interfaces);
++    return result;
++}
++
++static int
++register_mac_p2p_bridge(dnssd_private_t *dnssd)
++{
++    if (!mac_p2p_discovery_profile_enabled() || dnssd->bridge_connection) {
++        return 0;
++    }
++
++    uint32_t awdl_index = if_nametoindex("awdl0");
++    struct in_addr address;
++    if (!awdl_index || en0_ipv4_address(&address) != 0) {
++        return -1;
++    }
++
++    DNSServiceErrorType error =
++        DNSServiceCreateConnection(&dnssd->bridge_connection);
++    if (error != kDNSServiceErr_NoError) {
++        dnssd->bridge_connection = NULL;
++        return (int) error;
++    }
++
++    error = DNSServiceRegisterRecord(
++        dnssd->bridge_connection,
++        &dnssd->bridge_ipv4_record,
++        kDNSServiceFlagsUnique,
++        awdl_index,
++        MAC_P2P_BRIDGE_HOST,
++        kDNSServiceType_A,
++        kDNSServiceClass_IN,
++        sizeof(address),
++        &address,
++        0,
++        bridge_record_reply,
++        NULL);
++    if (error != kDNSServiceErr_NoError) {
++        dnssd->DNSServiceRefDeallocate(dnssd->bridge_connection);
++        dnssd->bridge_connection = NULL;
++        dnssd->bridge_ipv4_record = NULL;
++        return (int) error;
++    }
++
++    return 0;
++}
++
++static const char *
++mac_p2p_registration_host(dnssd_private_t *dnssd)
++{
++    (void) dnssd;
++    /*
++     * Let mDNSResponder publish the service against the host's real AWDL
++     * link-local address. The previous experiment forced an A record pointing
++     * back to en0, which defeated the SO_RECV_ANYIF listener path and could
++     * never reproduce the system receiver's point-to-point connection.
++     */
++    return NULL;
++}
++#endif
++
+ void *
+ dnssd_private_init(dnssd_t *dnssd_public, int *error)
+ {
+@@ -203,6 +422,13 @@ dnssd_private_destroy(void *private)
+ {
+     if (private) {
+         dnssd_private_t *dnssd = (dnssd_private_t *) private;
++#ifdef __APPLE__
++        if (dnssd->bridge_connection) {
++            dnssd->DNSServiceRefDeallocate(dnssd->bridge_connection);
++            dnssd->bridge_connection = NULL;
++            dnssd->bridge_ipv4_record = NULL;
++        }
++#endif
+ #ifdef WIN32
+         FreeLibrary(dnssd->module);
+ #elif USE_LIBDL
+@@ -216,54 +442,82 @@ int
+ dnssd_register_raop(dnssd_t *dnssd_public, unsigned short port)
+ {
+     char servname[MAX_SERVNAME];
+-
+     char features[22] = {0};
++    DNSServiceFlags registration_flags = 0;
++    uint32_t registration_interface = 0;
++    discovery_registration_options(&registration_flags, &registration_interface);
+ 
+     assert(dnssd_public);
+     assert(dnssd_public->dnssd_private);
+     dnssd_private_t *dnssd = (dnssd_private_t *) dnssd_public->dnssd_private;    
++    const char *registration_host = NULL;
++#ifdef __APPLE__
++    registration_host = mac_p2p_registration_host(dnssd);
++#endif
+ 
+     snprintf(features, sizeof(features), "0x%X,0x%X", dnssd_public->features1, dnssd_public->features2);
+ 
+     dnssd->TXTRecordCreate(&dnssd->raop_record, 0, NULL);
+-    dnssd->TXTRecordSetValue(&dnssd->raop_record, "ch", strlen(RAOP_CH), RAOP_CH);
+-    dnssd->TXTRecordSetValue(&dnssd->raop_record, "cn", strlen(RAOP_CN), RAOP_CN);
+-    dnssd->TXTRecordSetValue(&dnssd->raop_record, "da", strlen(RAOP_DA), RAOP_DA);
+-    dnssd->TXTRecordSetValue(&dnssd->raop_record, "et", strlen(RAOP_ET), RAOP_ET);
+-    dnssd->TXTRecordSetValue(&dnssd->raop_record, "vv", strlen(RAOP_VV), RAOP_VV);
+-    dnssd->TXTRecordSetValue(&dnssd->raop_record, "ft", strlen(features), features);
+-    dnssd->TXTRecordSetValue(&dnssd->raop_record, "am", strlen(GLOBAL_MODEL), GLOBAL_MODEL);
+-    dnssd->TXTRecordSetValue(&dnssd->raop_record, "md", strlen(RAOP_MD), RAOP_MD);
+-    dnssd->TXTRecordSetValue(&dnssd->raop_record, "rhd", strlen(RAOP_RHD), RAOP_RHD);
+-    switch (dnssd_public->pin_pw) {
+-    case 1:
+-        /* sf bit 3 0x08  means "pin required" according to https://openairplay.github.io/airplay-spec/status_flags.html  */
+-        dnssd->TXTRecordSetValue(&dnssd->raop_record, "pw", strlen("true"), "true");
+-        dnssd->TXTRecordSetValue(&dnssd->raop_record, "sf", strlen("0x8c"), "0x8c");
+-        break;
+-    case 2:
+-    case 3:
+-        /* sf bit 7 0x80 means "password required" according to https://openairplay.github.io/airplay-spec/status_flags.html  */
+-        dnssd->TXTRecordSetValue(&dnssd->raop_record, "pw", strlen("true"), "true");
+-        dnssd->TXTRecordSetValue(&dnssd->raop_record, "sf", strlen("0x84"), "0x84");
+-        break;
+-    default:
+-        dnssd->TXTRecordSetValue(&dnssd->raop_record, "pw", strlen("false"), "false");
+-        dnssd->TXTRecordSetValue(&dnssd->raop_record, "sf", strlen(RAOP_SF), RAOP_SF);
+-        break;
++    if (mac_wire_discovery_profile_enabled()) {
++        /*
++         * Match the system Mac receiver's wire-visible RAOP shape while
++         * retaining UxPlay's real feature bitmap and matching public key.
++         */
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "cn", strlen(RAOP_CN), RAOP_CN);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "da", strlen(RAOP_DA), RAOP_DA);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "et", strlen(RAOP_ET), RAOP_ET);
++        const char *wire_features = mac_wire_features();
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "ft",
++                                 strlen(wire_features), wire_features);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "sf",
++                                 strlen(MAC_WIRE_FLAGS), MAC_WIRE_FLAGS);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "md", strlen(RAOP_MD), RAOP_MD);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "am", strlen(MAC_WIRE_MODEL), MAC_WIRE_MODEL);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "pk", strlen(dnssd_public->pk), dnssd_public->pk);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "tp", strlen(RAOP_TP), RAOP_TP);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "vn", strlen(RAOP_VN), RAOP_VN);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "vs", strlen(MAC_WIRE_SRCVERS), MAC_WIRE_SRCVERS);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "vv", strlen("0"), "0");
++    } else {
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "ch", strlen(RAOP_CH), RAOP_CH);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "cn", strlen(RAOP_CN), RAOP_CN);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "da", strlen(RAOP_DA), RAOP_DA);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "et", strlen(RAOP_ET), RAOP_ET);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "vv", strlen(RAOP_VV), RAOP_VV);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "ft", strlen(features), features);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "am", strlen(GLOBAL_MODEL), GLOBAL_MODEL);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "md", strlen(RAOP_MD), RAOP_MD);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "rhd", strlen(RAOP_RHD), RAOP_RHD);
++        switch (dnssd_public->pin_pw) {
++        case 1:
++            /* sf bit 3 0x08 means "pin required". */
++            dnssd->TXTRecordSetValue(&dnssd->raop_record, "pw", strlen("true"), "true");
++            dnssd->TXTRecordSetValue(&dnssd->raop_record, "sf", strlen("0x8c"), "0x8c");
++            break;
++        case 2:
++        case 3:
++            /* sf bit 7 0x80 means "password required". */
++            dnssd->TXTRecordSetValue(&dnssd->raop_record, "pw", strlen("true"), "true");
++            dnssd->TXTRecordSetValue(&dnssd->raop_record, "sf", strlen("0x84"), "0x84");
++            break;
++        default:
++            dnssd->TXTRecordSetValue(&dnssd->raop_record, "pw", strlen("false"), "false");
++            dnssd->TXTRecordSetValue(&dnssd->raop_record, "sf", strlen(RAOP_SF), RAOP_SF);
++            break;
++        }
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "sr", strlen(RAOP_SR), RAOP_SR);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "ss", strlen(RAOP_SS), RAOP_SS);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "sv", strlen(RAOP_SV), RAOP_SV);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "tp", strlen(RAOP_TP), RAOP_TP);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "txtvers", strlen(RAOP_TXTVERS), RAOP_TXTVERS);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "vs", strlen(RAOP_VS), RAOP_VS);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "vn", strlen(RAOP_VN), RAOP_VN);
++        dnssd->TXTRecordSetValue(&dnssd->raop_record, "pk", strlen(dnssd_public->pk), dnssd_public->pk);
+     }
+-    dnssd->TXTRecordSetValue(&dnssd->raop_record, "sr", strlen(RAOP_SR), RAOP_SR);
+-    dnssd->TXTRecordSetValue(&dnssd->raop_record, "ss", strlen(RAOP_SS), RAOP_SS);
+-    dnssd->TXTRecordSetValue(&dnssd->raop_record, "sv", strlen(RAOP_SV), RAOP_SV);
+-    dnssd->TXTRecordSetValue(&dnssd->raop_record, "tp", strlen(RAOP_TP), RAOP_TP);
+-    dnssd->TXTRecordSetValue(&dnssd->raop_record, "txtvers", strlen(RAOP_TXTVERS), RAOP_TXTVERS);
+-    dnssd->TXTRecordSetValue(&dnssd->raop_record, "vs", strlen(RAOP_VS), RAOP_VS);
+-    dnssd->TXTRecordSetValue(&dnssd->raop_record, "vn", strlen(RAOP_VN), RAOP_VN);
+-    dnssd->TXTRecordSetValue(&dnssd->raop_record, "pk", strlen(dnssd_public->pk), dnssd_public->pk);
+-
+-    /* Convert hardware address to string */
+-    if (utils_hwaddr_raop(servname, sizeof(servname), dnssd_public->hw_addr, dnssd_public->hw_addr_len) < 0) {
+-        /* FIXME: handle better */
++
++    /* Convert hardware address to string. */
++    if (utils_hwaddr_raop(servname, sizeof(servname), dnssd_public->hw_addr,
++                          dnssd_public->hw_addr_len) < 0) {
+         return -1;
+     }
+ 
+@@ -277,9 +531,11 @@ dnssd_register_raop(dnssd_t *dnssd_public, unsigned short port)
+     strncat(servname, dnssd_public->name, sizeof(servname)-strlen(servname)-1);
+ 
+     /* Register the service */
+-    DNSServiceErrorType retval = dnssd->DNSServiceRegister(&dnssd->raop_service, 0, 0,
++    DNSServiceErrorType retval = dnssd->DNSServiceRegister(&dnssd->raop_service,
++                                                          registration_flags,
++                                                          registration_interface,
+                                                           servname, "_raop._tcp",
+-                                                          NULL, NULL,
++                                                          NULL, registration_host,
+                                                           htons(port),
+                                                           dnssd->TXTRecordGetLength(&dnssd->raop_record),
+                                                           dnssd->TXTRecordGetBytesPtr(&dnssd->raop_record),
+@@ -293,48 +549,87 @@ dnssd_register_airplay(dnssd_t *dnssd_public, unsigned short port)
+ {
+     char device_id[3 * MAX_HWADDR_LEN];
+     char features[22] = {0};
++    DNSServiceFlags registration_flags = 0;
++    uint32_t registration_interface = 0;
++    discovery_registration_options(&registration_flags, &registration_interface);
+ 
+     assert(dnssd_public);
+     assert(dnssd_public->dnssd_private);
+     dnssd_private_t *dnssd = (dnssd_private_t *) dnssd_public->dnssd_private;    
+-    
++    const char *registration_host = NULL;
++#ifdef __APPLE__
++    registration_host = mac_p2p_registration_host(dnssd);
++#endif
++
+     snprintf(features, sizeof(features), "0x%X,0x%X", dnssd_public->features1, dnssd_public->features2);
+ 
+-    /* Convert hardware address to string */
+-    if (utils_hwaddr_airplay(device_id, sizeof(device_id), dnssd_public->hw_addr, dnssd_public->hw_addr_len) < 0) {
+-        /* FIXME: handle better */
++    /* Convert hardware address to string. */
++    if (utils_hwaddr_airplay(device_id, sizeof(device_id), dnssd_public->hw_addr,
++                             dnssd_public->hw_addr_len) < 0) {
+         return -1;
+     }
+ 
+     // flags is a string representing a 20-bit flag (up to 3 hex digits)
+     dnssd->TXTRecordCreate(&dnssd->airplay_record, 0, NULL);
+-    dnssd->TXTRecordSetValue(&dnssd->airplay_record, "deviceid", strlen(device_id), device_id);
+-    dnssd->TXTRecordSetValue(&dnssd->airplay_record, "features", strlen(features), features);
+-    switch (dnssd_public->pin_pw) {
+-    case 1:   // display onscreen pin
+-        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "pw", strlen("true"), "true");
+-        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "flags", 3, "0x4");
+-        break;  
+-    case 2:  // require password
+-    case 3:
+-        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "pw", strlen("true"), "true");
+-        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "flags", 3, "0x4");
+-        break;
+-    default:
+-        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "pw", strlen("false"), "false");
+-        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "flags", 3, "0x4");
+-        break;
++    /*
++     * Keep the receiver identity distinct from the built-in Mac receiver.
++     * Reusing its Device ID causes visionOS to merge both services and select
++     * ControlCenter's dynamic endpoint instead of UxPlay.
++     */
++    const char *advertised_device_id = device_id;
++    dnssd->TXTRecordSetValue(&dnssd->airplay_record, "deviceid",
++                             strlen(advertised_device_id), advertised_device_id);
++    const char *advertised_features = mac_wire_discovery_profile_enabled()
++        ? mac_wire_features()
++        : features;
++    dnssd->TXTRecordSetValue(&dnssd->airplay_record, "features",
++                             strlen(advertised_features), advertised_features);
++    if (mac_wire_discovery_profile_enabled()) {
++        /*
++         * The complete Mac capability record is needed for visionOS to select
++         * the AWDL data path. StudyCast handles the advertised HomeKit/System
++         * pairing through the bundled pair_ap implementation.
++         */
++        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "acl", strlen("0"), "0");
++        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "fex", strlen(MAC_WIRE_FEX), MAC_WIRE_FEX);
++        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "flags",
++                                 strlen(MAC_WIRE_FLAGS), MAC_WIRE_FLAGS);
++        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "gid", strlen(MAC_WIRE_GID), MAC_WIRE_GID);
++        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "igl", strlen("0"), "0");
++        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "gcgl", strlen("0"), "0");
++        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "model", strlen(MAC_WIRE_MODEL), MAC_WIRE_MODEL);
++        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "at", strlen("4"), "4");
++        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "protovers", strlen("1.1"), "1.1");
++        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "pi", strlen(MAC_WIRE_PI), MAC_WIRE_PI);
++        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "psi", strlen(MAC_WIRE_PSI), MAC_WIRE_PSI);
++        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "pk", strlen(dnssd_public->pk), dnssd_public->pk);
++        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "srcvers", strlen(MAC_WIRE_SRCVERS), MAC_WIRE_SRCVERS);
++    } else {
++        switch (dnssd_public->pin_pw) {
++        case 1:   // display onscreen pin
++        case 2:   // require password
++        case 3:
++            dnssd->TXTRecordSetValue(&dnssd->airplay_record, "pw", strlen("true"), "true");
++            dnssd->TXTRecordSetValue(&dnssd->airplay_record, "flags", 3, "0x4");
++            break;
++        default:
++            dnssd->TXTRecordSetValue(&dnssd->airplay_record, "pw", strlen("false"), "false");
++            dnssd->TXTRecordSetValue(&dnssd->airplay_record, "flags", 3, "0x4");
++            break;
++        }
++        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "model", strlen(GLOBAL_MODEL), GLOBAL_MODEL);
++        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "pk", strlen(dnssd_public->pk), dnssd_public->pk);
++        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "pi", strlen(AIRPLAY_PI), AIRPLAY_PI);
++        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "srcvers", strlen(AIRPLAY_SRCVERS), AIRPLAY_SRCVERS);
++        dnssd->TXTRecordSetValue(&dnssd->airplay_record, "vv", strlen(AIRPLAY_VV), AIRPLAY_VV);
+     }
+-    dnssd->TXTRecordSetValue(&dnssd->airplay_record, "model", strlen(GLOBAL_MODEL), GLOBAL_MODEL);
+-    dnssd->TXTRecordSetValue(&dnssd->airplay_record, "pk", strlen(dnssd_public->pk), dnssd_public->pk);
+-    dnssd->TXTRecordSetValue(&dnssd->airplay_record, "pi", strlen(AIRPLAY_PI), AIRPLAY_PI);
+-    dnssd->TXTRecordSetValue(&dnssd->airplay_record, "srcvers", strlen(AIRPLAY_SRCVERS), AIRPLAY_SRCVERS);
+-    dnssd->TXTRecordSetValue(&dnssd->airplay_record, "vv", strlen(AIRPLAY_VV), AIRPLAY_VV);
+ 
+     /* Register the service */
+-    DNSServiceErrorType retval = dnssd->DNSServiceRegister(&dnssd->airplay_service, 0, 0,
++    DNSServiceErrorType retval = dnssd->DNSServiceRegister(&dnssd->airplay_service,
++                                                           registration_flags,
++                                                           registration_interface,
+                                                            dnssd_public->name, "_airplay._tcp",
+-                                                           NULL, NULL,
++                                                           NULL, registration_host,
+                                                            htons(port),
+                                                            dnssd->TXTRecordGetLength(&dnssd->airplay_record),
+                                                            dnssd->TXTRecordGetBytesPtr(&dnssd->airplay_record),
+diff --git a/lib/netutils.c b/lib/netutils.c
+index 726ab13..7285019 100644
+--- a/lib/netutils.c
++++ b/lib/netutils.c
+@@ -21,6 +21,15 @@
+ 
+ #include "compat.h"
+ 
++#if defined(__APPLE__) && !defined(SO_RECV_ANYIF)
++/*
++ * XNU's private socket.h defines this as "unrestricted inbound processing".
++ * It is required for a conventional BSD listener to receive traffic delivered
++ * over AWDL. Keep it opt-in so normal UxPlay networking is unchanged.
++ */
++#define SO_RECV_ANYIF 0x1104
++#endif
++
+ int
+ netutils_init()
+ {
+@@ -114,6 +123,23 @@ netutils_init_socket(unsigned short *port, int use_ipv6, int use_udp)
+         goto cleanup;
+     }
+ 
++#if defined(__APPLE__)
++    const char *awdl_receive = getenv("UXPLAY_AWDL_RECV_ANYIF");
++    if (awdl_receive && awdl_receive[0] != '\0' && strcmp(awdl_receive, "0") != 0) {
++        int receive_anyif = 1;
++        int anyif_ret = setsockopt(
++            server_fd,
++            SOL_SOCKET,
++            SO_RECV_ANYIF,
++            &receive_anyif,
++            sizeof(receive_anyif)
++        );
++        if (anyif_ret == -1) {
++            goto cleanup;
++        }
++    }
++#endif
++
+     int ret = setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr, sizeof (reuseaddr));
+     if (ret == -1) {
+         goto cleanup;

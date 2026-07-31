@@ -1,0 +1,130 @@
+From d39c7a9ed5c36fde7d0ee1a9d62b13ed5e521d21 Mon Sep 17 00:00:00 2001
+From: JerryNee <ni12@illinois.edu>
+Date: Fri, 31 Jul 2026 16:35:45 -0500
+Subject: [PATCH 2/3] Decrypt mirror payloads out of place
+
+mirror_buffer_decrypt() decrypted into the input buffer and then copied the
+result to the output. That is invisible with a single buffer, but it destroys
+the ciphertext for anything that needs to read it afterwards -- including
+decrypting the same packet with a second key, which the AP2 media-key probe
+in the following commit does.
+
+Decrypt straight into the output buffer instead, and take the input as const
+so this cannot regress.
+
+Also generalize the key material from a fixed 16-byte audio AES key to a
+variable-length "media seed", since AP2 senders derive the mirroring key from
+material of other sizes.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ lib/mirror_buffer.c | 34 ++++++++++++++++++++++++----------
+ lib/mirror_buffer.h | 10 ++++++++--
+ 2 files changed, 32 insertions(+), 12 deletions(-)
+
+diff --git a/lib/mirror_buffer.c b/lib/mirror_buffer.c
+index d6d5667..3fe772c 100644
+--- a/lib/mirror_buffer.c
++++ b/lib/mirror_buffer.c
+@@ -33,8 +33,9 @@ struct mirror_buffer_s {
+     aes_ctx_t *aes_ctx;
+     int nextDecryptCount;
+     uint8_t og[16];
+-    /* audio aes key is used in a hash for the video aes key and iv */
+-    unsigned char aeskey_audio[RAOP_AESKEY_LEN];
++    /* The media seed is used in a hash for the video AES key and IV. */
++    unsigned char media_seed[64];
++    size_t media_seed_len;
+ };
+ 
+ void
+@@ -54,12 +55,14 @@ mirror_buffer_init_aes(mirror_buffer_t *mirror_buffer, const uint64_t *streamCon
+ 
+     sha_ctx_t *ctx = sha_init();
+     sha_update(ctx, aeskey_video, strlen((char*) aeskey_video));
+-    sha_update(ctx, mirror_buffer->aeskey_audio, RAOP_AESKEY_LEN);
++    sha_update(ctx, mirror_buffer->media_seed,
++               (int) mirror_buffer->media_seed_len);
+     sha_final(ctx, aeskey_video, NULL);
+ 
+     sha_reset(ctx);
+     sha_update(ctx, aesiv_video, strlen((char*) aesiv_video));
+-    sha_update(ctx, mirror_buffer->aeskey_audio, RAOP_AESKEY_LEN);
++    sha_update(ctx, mirror_buffer->media_seed,
++               (int) mirror_buffer->media_seed_len);
+     sha_final(ctx, aesiv_video, NULL);
+     sha_destroy(ctx);
+ 
+@@ -70,18 +73,31 @@ mirror_buffer_init_aes(mirror_buffer_t *mirror_buffer, const uint64_t *streamCon
+ mirror_buffer_t *
+ mirror_buffer_init(logger_t *logger, const unsigned char *aeskey)
+ {
+-    assert(aeskey);
++    return mirror_buffer_init_with_seed(logger, aeskey, RAOP_AESKEY_LEN);
++}
++
++mirror_buffer_t *
++mirror_buffer_init_with_seed(logger_t *logger, const unsigned char *seed,
++                             size_t seed_len)
++{
++    assert(seed);
++    if (seed_len == 0 || seed_len > 64) {
++        return NULL;
++    }
+     mirror_buffer_t *mirror_buffer = (mirror_buffer_t *) calloc(1, sizeof(mirror_buffer_t));
+     if (!mirror_buffer) {
+         return NULL;
+     }
+-    memcpy(mirror_buffer->aeskey_audio, aeskey, RAOP_AESKEY_LEN);
++    memcpy(mirror_buffer->media_seed, seed, seed_len);
++    mirror_buffer->media_seed_len = seed_len;
+     mirror_buffer->logger = logger;
+     mirror_buffer->nextDecryptCount = 0;
+     return mirror_buffer;
+ }
+ 
+-void mirror_buffer_decrypt(mirror_buffer_t *mirror_buffer, unsigned char* input, unsigned char* output, int inputLen) {
++void mirror_buffer_decrypt(mirror_buffer_t *mirror_buffer,
++                           const unsigned char *input,
++                           unsigned char *output, int inputLen) {
+     // Start decrypting
+     if (mirror_buffer->nextDecryptCount > 0) {//mirror_buffer->nextDecryptCount = 10
+         for (int i = 0; i < mirror_buffer->nextDecryptCount; i++) {
+@@ -93,9 +109,7 @@ void mirror_buffer_decrypt(mirror_buffer_t *mirror_buffer, unsigned char* input,
+     // Aes decryption
+     aes_ctr_start_fresh_block(mirror_buffer->aes_ctx);
+     aes_ctr_decrypt(mirror_buffer->aes_ctx, input + mirror_buffer->nextDecryptCount,
+-                    input + mirror_buffer->nextDecryptCount, encryptlen);
+-    // Copy to output
+-    memcpy(output + mirror_buffer->nextDecryptCount, input + mirror_buffer->nextDecryptCount, encryptlen);
++                    output + mirror_buffer->nextDecryptCount, encryptlen);
+     // int outputlength = mirror_buffer->nextDecryptCount + encryptlen;
+     // Processing remaining length
+     int restlen = (inputLen - mirror_buffer->nextDecryptCount) % 16;
+diff --git a/lib/mirror_buffer.h b/lib/mirror_buffer.h
+index 2b65ab0..a08b82b 100644
+--- a/lib/mirror_buffer.h
++++ b/lib/mirror_buffer.h
+@@ -18,14 +18,20 @@
+ #ifndef MIRROR_BUFFER_H
+ #define MIRROR_BUFFER_H
+ 
++#include <stddef.h>
+ #include <stdint.h>
+ #include "logger.h"
+ 
+ typedef struct mirror_buffer_s mirror_buffer_t;
+ 
+ 
+-mirror_buffer_t *mirror_buffer_init( logger_t *logger, const unsigned char *aeskey);
++mirror_buffer_t *mirror_buffer_init(logger_t *logger, const unsigned char *aeskey);
++mirror_buffer_t *mirror_buffer_init_with_seed(logger_t *logger,
++                                              const unsigned char *seed,
++                                              size_t seed_len);
+ void mirror_buffer_init_aes(mirror_buffer_t *mirror_buffer, const uint64_t *streamConnectionID);
+-void mirror_buffer_decrypt(mirror_buffer_t *raop_mirror, unsigned char* input, unsigned char* output, int datalen);
++void mirror_buffer_decrypt(mirror_buffer_t *raop_mirror,
++                           const unsigned char *input,
++                           unsigned char *output, int datalen);
+ void mirror_buffer_destroy(mirror_buffer_t *mirror_buffer);
+ #endif //MIRROR_BUFFER_H

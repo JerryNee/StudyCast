@@ -1,0 +1,10 @@
+build/
+.vscode/
+# in-source cmake build artifacts
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+cmake_uninstall.cmake
+Makefile
+*.a
+/uxplay

@@ -14,15 +14,22 @@ brew install gstreamer ffmpeg
 
 ## UxPlay
 
-StudyCast uses UxPlay as the AirPlay receiver helper. For source builds, build UxPlay separately and point StudyCast at the resulting executable:
+StudyCast uses UxPlay as its AirPlay receiver helper, vendored in
+`third_party/UxPlay` with StudyCast's modifications already applied. Upstream
+UxPlay will not do: the changes that let a sender reach StudyCast over Apple
+peer-to-peer live in that tree. See
+[../third_party/README.md](../third_party/README.md) for provenance and the
+patch series.
 
 ```sh
-git clone https://github.com/FDH2/UxPlay.git
-cd UxPlay
-# Build UxPlay using the upstream instructions for macOS.
-export UXPLAY_SOURCE_DIR="$PWD"
-export UXPLAY_PATH="$PWD/uxplay"
+brew install libplist openssl@3 libsodium
+cd third_party/UxPlay
+cmake .
+make -j"$(sysctl -n hw.ncpu)"
 ```
+
+`scripts/bundle_runtime.sh` finds the resulting binary on its own. To build
+against a checkout somewhere else, set `UXPLAY_SOURCE_DIR` and `UXPLAY_PATH`.
 
 Release builds must also set `UXPLAY_COMMIT` to the exact source commit used for the bundled helper.
 

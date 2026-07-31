@@ -31,10 +31,16 @@ UXPLAY_COMMIT="${UXPLAY_COMMIT:-}"
 
 if [[ -z "${UXPLAY_SOURCE_DIR}" ]]; then
   REPO_ROOT="${PROJECT_DIR:-$(pwd)}"
+  # The vendored tree is the one StudyCast is built and tested against, so it
+  # wins over a sibling checkout that may be an unpatched or stale UxPlay.
+  VENDORED_UXPLAY_DIR="${REPO_ROOT}/third_party/UxPlay"
   SIBLING_UXPLAY_DIR="$(cd "${REPO_ROOT}/.." 2>/dev/null && pwd)/UxPlay"
-  if [[ -x "${SIBLING_UXPLAY_DIR}/uxplay" ]]; then
-    UXPLAY_SOURCE_DIR="${SIBLING_UXPLAY_DIR}"
-  fi
+  for candidate in "${VENDORED_UXPLAY_DIR}" "${SIBLING_UXPLAY_DIR}"; do
+    if [[ -x "${candidate}/uxplay" ]]; then
+      UXPLAY_SOURCE_DIR="${candidate}"
+      break
+    fi
+  done
 fi
 
 if [[ -z "${UXPLAY_PATH}" && -n "${UXPLAY_SOURCE_DIR}" && -x "${UXPLAY_SOURCE_DIR}/uxplay" ]]; then
