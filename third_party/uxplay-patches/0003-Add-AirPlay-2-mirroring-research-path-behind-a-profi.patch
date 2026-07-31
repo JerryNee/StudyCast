@@ -1,9 +1,9 @@
-From a07914ad8da3627ecfc17f7825714c758b6eaccf Mon Sep 17 00:00:00 2001
+From fde2fa632c033d9e810a39ff62be3f454c9d25d0 Mon Sep 17 00:00:00 2001
 From: JerryNee <ni12@illinois.edu>
-Date: Fri, 31 Jul 2026 16:36:10 -0500
+Date: Fri, 31 Jul 2026 17:07:18 -0500
 Subject: [PATCH 3/3] Add AirPlay 2 mirroring research path behind a profile
 
-Impersonating a system Mac receiver (model=Mac15,6, a modern srcvers and the
+Impersonating a Mac receiver (a Mac model string, a modern srcvers and the
 HomeKit pairing endpoints) is one way to be offered over Apple peer-to-peer.
 It works for discovery, and this adds what that path needs: HomeKit
 pair-setup/pair-verify via pair_ap, the encrypted control and event channels,
@@ -25,6 +25,10 @@ offering the legacy path. Two aids for that work:
 - ap2_capture records the session material a derivation could consume plus
   the first encrypted payloads, so the search can run offline instead of
   spending a physical mirroring session per guess.
+
+The impersonated Bonjour identity uses synthetic identifiers. Copying a real
+machine's device ID and pairing UUIDs would leak that device's identity and
+collide with it on any network where it is present.
 
 Selected by UXPLAY_DISCOVERY_PROFILE=mac-p2p. The shipping configuration does
 not use any of this: a plain UxPlay identity reaches AWDL just as well and
@@ -48,12 +52,12 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
  lib/pair_ap/pair_homekit.c  | 3242 +++++++++++++++++++++++++++++++++++
  lib/playfair/playfair.c     |    8 +-
  lib/playfair/playfair.h     |    1 +
- lib/raop.c                  |  584 ++++++-
- lib/raop_handlers.h         |  583 ++++++-
+ lib/raop.c                  |  573 ++++++-
+ lib/raop_handlers.h         |  577 ++++++-
  lib/raop_rtp_mirror.c       |  160 +-
  lib/raop_rtp_mirror.h       |    5 +
  uxplay.cpp                  |    1 +
- 21 files changed, 7672 insertions(+), 36 deletions(-)
+ 21 files changed, 7655 insertions(+), 36 deletions(-)
  create mode 100644 lib/ap2_capture.c
  create mode 100644 lib/ap2_capture.h
  create mode 100644 lib/pair_ap/pair-internal.h
@@ -6619,7 +6623,7 @@ index 5909a99..ff72236 100644
  
  #endif
 diff --git a/lib/raop.c b/lib/raop.c
-index 7098fae..5fd57a4 100644
+index 7098fae..3516197 100644
 --- a/lib/raop.c
 +++ b/lib/raop.c
 @@ -22,7 +22,9 @@
@@ -6657,18 +6661,17 @@ index 7098fae..5fd57a4 100644
  struct raop_s {
      /* Callbacks for audio and video */
      raop_callbacks_t callbacks;
-@@ -52,6 +64,10 @@ struct raop_s {
+@@ -52,6 +64,9 @@ struct raop_s {
      /* Pairing, HTTP daemon and RSA key */
      pairing_t *pairing;
      httpd_t *httpd;
 +    bool hkp_enabled;
-+    bool hkp_legacy_media;
 +    char hkp_device_id[PAIR_AP_DEVICE_ID_LEN_MAX];
 +    struct hkp_paired_client_s hkp_clients[HKP_MAX_PAIRED_CLIENTS];
  
      dnssd_t *dnssd;
  
-@@ -119,9 +135,432 @@ struct raop_conn_s {
+@@ -119,9 +134,432 @@ struct raop_conn_s {
      char *client_session_id;
      bool authenticated;
      bool have_active_remote;
@@ -7101,7 +7104,7 @@ index 7098fae..5fd57a4 100644
  #include "raop_handlers.h"
  #include "http_handlers.h"
  
-@@ -140,6 +579,9 @@ conn_init(void *opaque, unsigned char *local, int locallen, unsigned char *remot
+@@ -140,6 +578,9 @@ conn_init(void *opaque, unsigned char *local, int locallen, unsigned char *remot
      conn->raop_rtp = NULL;
      conn->raop_rtp_mirror = NULL;
      conn->raop_ntp = NULL;
@@ -7111,7 +7114,7 @@ index 7098fae..5fd57a4 100644
      conn->fairplay = fairplay_init(raop->logger);
  
      if (!conn->fairplay) {
-@@ -257,15 +699,21 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
+@@ -257,15 +698,21 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
          ble = true;
      }
  
@@ -7135,7 +7138,7 @@ index 7098fae..5fd57a4 100644
  
      if (conn->connection_type == CONNECTION_TYPE_UNKNOWN) {
          if (cseq || ble) {
-@@ -333,7 +781,7 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
+@@ -333,7 +780,7 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
      http_response_init(*response, protocol, 200, "OK");
  
      /* is this really necessary? or is it obsolete? (added for all RTSP requests EXCEPT "RECORD") */
@@ -7144,7 +7147,7 @@ index 7098fae..5fd57a4 100644
  	    http_response_add_header(*response, "Audio-Jack-Status", "connected; type=digital");
      }
  
-@@ -356,7 +804,14 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
+@@ -356,7 +803,14 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
      http_request_get_header_string(request, &header_str);
      if (header_str && logger_debug) {
          logger_log(raop->logger, LOGGER_DEBUG, "%s", header_str);
@@ -7160,7 +7163,7 @@ index 7098fae..5fd57a4 100644
          bool data_is_text = (strstr(header_str,"text/") != NULL);
          int request_datalen = 0;
          const char *request_data = http_request_get_data(request, &request_datalen);
-@@ -369,9 +824,19 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
+@@ -369,9 +823,19 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
                      char * plist_xml = NULL;
                      char * stripped_xml = NULL;
                      uint32_t plist_len = 0;
@@ -7183,7 +7186,7 @@ index 7098fae..5fd57a4 100644
                      if (stripped_xml) {
                          free(stripped_xml);
                      }
-@@ -442,7 +907,15 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
+@@ -442,7 +906,15 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
          }
      } else if (!hls_request && !strcmp(protocol, "HTTP/1.1")) {
          if (!strcmp(method, "POST")) {
@@ -7200,7 +7203,7 @@ index 7098fae..5fd57a4 100644
                  handler = &http_handler_reverse;
              } else if (!strcmp(url, "/play")) {
                  handler = &http_handler_play;
-@@ -484,7 +957,11 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
+@@ -484,7 +956,11 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
  
      finish:;
      if (!hls_request) {
@@ -7213,7 +7216,7 @@ index 7098fae..5fd57a4 100644
          if (cseq) {
              http_response_add_header(*response, "CSeq", cseq);
          }
-@@ -516,10 +993,20 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
+@@ -516,10 +992,20 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
                  plist_from_bin(response_data, response_datalen, &res_root_node);
                  char * plist_xml = NULL;
                  char * stripped_xml = NULL;
@@ -7238,7 +7241,7 @@ index 7098fae..5fd57a4 100644
                  if (stripped_xml) {
                      free(stripped_xml);
                  }
-@@ -565,12 +1052,40 @@ conn_destroy(void *ptr) {
+@@ -565,12 +1051,40 @@ conn_destroy(void *ptr) {
          raop_ntp_destroy(conn->raop_ntp);
      }
  
@@ -7279,23 +7282,13 @@ index 7098fae..5fd57a4 100644
      pairing_session_destroy(conn->session);
      fairplay_destroy(conn->fairplay);
      if (conn->client_session_id) {
-@@ -650,6 +1165,29 @@ raop_init2(raop_t *raop, int nohold, const char *device_id, const char *keyfile)
+@@ -650,6 +1164,19 @@ raop_init2(raop_t *raop, int nohold, const char *device_id, const char *keyfile)
      pairing_t *pairing = NULL;
      httpd_t *httpd = NULL;
  
 +    const char *discovery_profile = getenv("UXPLAY_DISCOVERY_PROFILE");
 +    raop->hkp_enabled = discovery_profile &&
-+        (!strcmp(discovery_profile, "mac-p2p") ||
-+         !strcmp(discovery_profile, "mac-p2p-legacy") ||
-+         !strcmp(discovery_profile, "mac-p2p-hybrid"));
-+    /*
-+     * "mac-p2p-hybrid" keeps the modern Mac bitmap in the Bonjour TXT, which
-+     * is what makes the sender choose AWDL, but reports UxPlay's own feature
-+     * set from /info so it still negotiates the legacy FairPlay media setup.
-+     */
-+    raop->hkp_legacy_media = discovery_profile &&
-+        (!strcmp(discovery_profile, "mac-p2p-legacy") ||
-+         !strcmp(discovery_profile, "mac-p2p-hybrid"));
++        !strcmp(discovery_profile, "mac-p2p");
 +    if (raop->hkp_enabled) {
 +        if (pair_init() < 0) {
 +            logger_log(raop->logger, LOGGER_ERR,
@@ -7309,7 +7302,7 @@ index 7098fae..5fd57a4 100644
      /* create a new public key for pairing */
      int new_key = 0;
      pairing = pairing_init_generate(device_id, keyfile, &new_key);
-@@ -668,6 +1206,23 @@ raop_init2(raop_t *raop, int nohold, const char *device_id, const char *keyfile)
+@@ -668,6 +1195,23 @@ raop_init2(raop_t *raop, int nohold, const char *device_id, const char *keyfile)
      strncpy(raop->pk_str, (const char *) pk_str, 2*ED25519_KEY_SIZE);
      free(pk_str);
  #endif
@@ -7333,7 +7326,7 @@ index 7098fae..5fd57a4 100644
      if (new_key) {
          logger_log(raop->logger, LOGGER_INFO,"*** A new Public Key has been created and stored in %s", keyfile);
      }
-@@ -678,6 +1233,9 @@ raop_init2(raop_t *raop, int nohold, const char *device_id, const char *keyfile)
+@@ -678,6 +1222,9 @@ raop_init2(raop_t *raop, int nohold, const char *device_id, const char *keyfile)
      httpd_cbs.opaque = raop;
      httpd_cbs.conn_init = &conn_init;
      httpd_cbs.conn_request = &conn_request;
@@ -7344,26 +7337,20 @@ index 7098fae..5fd57a4 100644
  
      /* Initialize the http daemon, (this will take a copy of httpd_cbs) */
 diff --git a/lib/raop_handlers.h b/lib/raop_handlers.h
-index 1aeba28..fed0fb0 100644
+index 1aeba28..4c40955 100644
 --- a/lib/raop_handlers.h
 +++ b/lib/raop_handlers.h
-@@ -131,6 +131,32 @@ raop_handler_info(raop_conn_t *conn,
+@@ -131,6 +131,26 @@ raop_handler_info(raop_conn_t *conn,
      free(pk);
  
      uint64_t features = dnssd_get_airplay_features(raop->dnssd);
-+    /*
-+     * Preserve Mac/P2P discovery and HomeKit access control, but ask the
-+     * sender to use UxPlay's proven legacy FairPlay media setup after the
-+     * encrypted control channel is established.
-+     */
 +    if (raop->hkp_enabled) {
-+        features = raop->hkp_legacy_media
-+            ? 0x527FFEE6ULL
-+            : 0x381607DE5A7FFEE6ULL;
++        features = 0x381607DE5A7FFEE6ULL;
 +        /*
 +         * Keep /info consistent with the advertised TXT bitmap. Reporting a
-+         * different feature set here does not switch the sender back to the
-+         * legacy ekey path -- it just stalls before the type-110 SETUP.
++         * legacy feature set here does not switch the sender back to the ekey
++         * path -- it just stalls before the type-110 SETUP -- so the override
++         * exists to change both together, not to disagree.
 +         */
 +        const char *features_override = getenv("UXPLAY_MAC_FEATURES");
 +        if (features_override && features_override[0]) {
@@ -7380,7 +7367,7 @@ index 1aeba28..fed0fb0 100644
      plist_t features_node = plist_new_uint(features);
      plist_dict_set_item(res_node, "features", features_node);
  
-@@ -139,25 +165,33 @@ raop_handler_info(raop_conn_t *conn,
+@@ -139,25 +159,33 @@ raop_handler_info(raop_conn_t *conn,
      plist_t name_node = plist_new_string(name);
      plist_dict_set_item(res_node, "name", name_node);
  
@@ -7418,7 +7405,7 @@ index 1aeba28..fed0fb0 100644
      plist_dict_set_item(res_node, "model", model_node);
  
      /* dont need anything below here in the Bluetooth LE response */
-@@ -271,6 +305,12 @@ raop_handler_pairpinstart(raop_conn_t *conn,
+@@ -271,6 +299,12 @@ raop_handler_pairpinstart(raop_conn_t *conn,
           raop->callbacks.display_pin(raop->callbacks.cls, pin);
      }
      logger_log(raop->logger, LOGGER_INFO, "*** CLIENT MUST NOW ENTER PIN = \"%s\" AS AIRPLAY PASSWORD", pin);
@@ -7431,7 +7418,7 @@ index 1aeba28..fed0fb0 100644
  }
  
  static void
-@@ -432,6 +472,210 @@ raop_handler_pairsetup_pin(raop_conn_t *conn,
+@@ -432,6 +466,210 @@ raop_handler_pairsetup_pin(raop_conn_t *conn,
      http_response_init(response, "RTSP/1.0", 470, "Client Authentication Failure");
  }
  
@@ -7642,7 +7629,7 @@ index 1aeba28..fed0fb0 100644
  static void
  raop_handler_pairsetup(raop_conn_t *conn,
                         http_request_t *request, http_response_t *response,
-@@ -439,13 +683,31 @@ raop_handler_pairsetup(raop_conn_t *conn,
+@@ -439,13 +677,31 @@ raop_handler_pairsetup(raop_conn_t *conn,
  {
      raop_t *raop = conn->raop;
      unsigned char public_key[ED25519_KEY_SIZE];
@@ -7678,7 +7665,7 @@ index 1aeba28..fed0fb0 100644
          return;
      }
  
-@@ -481,6 +743,11 @@ raop_handler_pairverify(raop_conn_t *conn,
+@@ -481,6 +737,11 @@ raop_handler_pairverify(raop_conn_t *conn,
      int datalen = 0;
  
      data = (unsigned char *) http_request_get_data(request, &datalen);
@@ -7690,7 +7677,7 @@ index 1aeba28..fed0fb0 100644
      if (datalen < 4) {
          logger_log(raop->logger, LOGGER_ERR, "Invalid pair-verify data");
          return;
-@@ -589,6 +856,106 @@ raop_handler_options(raop_conn_t *conn,
+@@ -589,6 +850,106 @@ raop_handler_options(raop_conn_t *conn,
      http_response_add_header(response, "Public", "SETUP, RECORD, FLUSH, TEARDOWN, OPTIONS, GET_PARAMETER, SET_PARAMETER");
  }
  
@@ -7797,7 +7784,7 @@ index 1aeba28..fed0fb0 100644
  static void
  raop_handler_setup(raop_conn_t *conn,
                     http_request_t *request, http_response_t *response,
-@@ -928,6 +1295,172 @@ raop_handler_setup(raop_conn_t *conn,
+@@ -928,6 +1289,172 @@ raop_handler_setup(raop_conn_t *conn,
          plist_dict_set_item(res_root_node, "eventPort", res_event_port_node);
  
          logger_log(raop->logger, LOGGER_DEBUG, "eport = %d, tport = %d", event_port, timing_lport);
@@ -7970,7 +7957,7 @@ index 1aeba28..fed0fb0 100644
      }
  
      // Process stream setup requests
-@@ -947,7 +1480,8 @@ raop_handler_setup(raop_conn_t *conn,
+@@ -947,7 +1474,8 @@ raop_handler_setup(raop_conn_t *conn,
              case 110: {
                  // Mirroring
                  raop_destroy_airplay_video(raop, -1);  //cleanup any hls data still present when mirror video starts
@@ -7980,7 +7967,7 @@ index 1aeba28..fed0fb0 100644
                  plist_t stream_id_node = plist_dict_get_item(req_stream_node, "streamConnectionID");
                  uint64_t stream_connection_id = 0;
                  plist_get_uint_val(stream_id_node, &stream_connection_id);
-@@ -968,6 +1502,27 @@ raop_handler_setup(raop_conn_t *conn,
+@@ -968,6 +1496,27 @@ raop_handler_setup(raop_conn_t *conn,
                  plist_t res_stream_type_node = plist_new_uint(110);
                  plist_dict_set_item(res_stream_node, "dataPort", res_stream_data_port_node);
                  plist_dict_set_item(res_stream_node, "type", res_stream_type_node);
@@ -8008,7 +7995,7 @@ index 1aeba28..fed0fb0 100644
                  plist_array_append_item(res_streams_node, res_stream_node);
  
                  break;
-@@ -1207,8 +1762,14 @@ raop_handler_record(raop_conn_t *conn,
+@@ -1207,8 +1756,14 @@ raop_handler_record(raop_conn_t *conn,
      unsigned int ad = (unsigned int) (((uint64_t) raop->audio_delay_micros) * AUDIO_SAMPLE_RATE / SECOND_IN_USECS);
      snprintf(audio_latency, sizeof(audio_latency), "%u", ad);
      logger_log(raop->logger, LOGGER_DEBUG, "raop_handler_record");

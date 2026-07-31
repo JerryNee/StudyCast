@@ -65,7 +65,6 @@ struct raop_s {
     pairing_t *pairing;
     httpd_t *httpd;
     bool hkp_enabled;
-    bool hkp_legacy_media;
     char hkp_device_id[PAIR_AP_DEVICE_ID_LEN_MAX];
     struct hkp_paired_client_s hkp_clients[HKP_MAX_PAIRED_CLIENTS];
 
@@ -1167,17 +1166,7 @@ raop_init2(raop_t *raop, int nohold, const char *device_id, const char *keyfile)
 
     const char *discovery_profile = getenv("UXPLAY_DISCOVERY_PROFILE");
     raop->hkp_enabled = discovery_profile &&
-        (!strcmp(discovery_profile, "mac-p2p") ||
-         !strcmp(discovery_profile, "mac-p2p-legacy") ||
-         !strcmp(discovery_profile, "mac-p2p-hybrid"));
-    /*
-     * "mac-p2p-hybrid" keeps the modern Mac bitmap in the Bonjour TXT, which
-     * is what makes the sender choose AWDL, but reports UxPlay's own feature
-     * set from /info so it still negotiates the legacy FairPlay media setup.
-     */
-    raop->hkp_legacy_media = discovery_profile &&
-        (!strcmp(discovery_profile, "mac-p2p-legacy") ||
-         !strcmp(discovery_profile, "mac-p2p-hybrid"));
+        !strcmp(discovery_profile, "mac-p2p");
     if (raop->hkp_enabled) {
         if (pair_init() < 0) {
             logger_log(raop->logger, LOGGER_ERR,

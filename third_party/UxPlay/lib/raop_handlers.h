@@ -131,19 +131,13 @@ raop_handler_info(raop_conn_t *conn,
     free(pk);
 
     uint64_t features = dnssd_get_airplay_features(raop->dnssd);
-    /*
-     * Preserve Mac/P2P discovery and HomeKit access control, but ask the
-     * sender to use UxPlay's proven legacy FairPlay media setup after the
-     * encrypted control channel is established.
-     */
     if (raop->hkp_enabled) {
-        features = raop->hkp_legacy_media
-            ? 0x527FFEE6ULL
-            : 0x381607DE5A7FFEE6ULL;
+        features = 0x381607DE5A7FFEE6ULL;
         /*
          * Keep /info consistent with the advertised TXT bitmap. Reporting a
-         * different feature set here does not switch the sender back to the
-         * legacy ekey path -- it just stalls before the type-110 SETUP.
+         * legacy feature set here does not switch the sender back to the ekey
+         * path -- it just stalls before the type-110 SETUP -- so the override
+         * exists to change both together, not to disagree.
          */
         const char *features_override = getenv("UXPLAY_MAC_FEATURES");
         if (features_override && features_override[0]) {
