@@ -14,8 +14,13 @@ StudyCast release builds are created locally. The current public beta can ship a
 
 ```sh
 export RELEASE_VERSION=0.1.0-beta.2
-export UXPLAY_SOURCE_DIR=/path/to/UxPlay
-export UXPLAY_COMMIT=<exact-commit>
+```
+
+The UxPlay helper comes from the vendored `third_party/UxPlay`, so its location
+and commit no longer need to be supplied. Build it first:
+
+```sh
+cd third_party/UxPlay && cmake . && make -j"$(sysctl -n hw.ncpu)"
 ```
 
 Build the current preview DMG:
@@ -32,8 +37,6 @@ This creates `StudyCast-${RELEASE_VERSION}-arm64-unsigned.dmg`. It is ad-hoc sig
 export RELEASE_VERSION=0.1.0-beta.2
 export DEVELOPER_ID_APPLICATION='Developer ID Application: Your Name (TEAMID)'
 export NOTARYTOOL_PROFILE=studycast-notary
-export UXPLAY_SOURCE_DIR=/path/to/UxPlay
-export UXPLAY_COMMIT=<exact-commit>
 export SIGNING_MODE=developer-id
 ```
 
@@ -57,8 +60,7 @@ The package script produces:
 
 - `build/release/assets/StudyCast-${RELEASE_VERSION}-arm64-unsigned.dmg` for `SIGNING_MODE=adhoc`
 - `build/release/assets/StudyCast-${RELEASE_VERSION}-arm64.dmg` for `SIGNING_MODE=developer-id`
-- `build/release/assets/StudyCast-${RELEASE_VERSION}-source.tar.gz`
-- `build/release/assets/UxPlay-${UXPLAY_COMMIT}-source.tar.gz`
+- `build/release/assets/StudyCast-${RELEASE_VERSION}-source.tar.gz`, which carries the bundled helper's source in `third_party/UxPlay`
 - `build/release/assets/ThirdPartyNotices.md`
 - `build/release/assets/SourceOffer.md`
 
@@ -67,6 +69,7 @@ The package script produces:
 - Confirm `CHANGELOG.md` has the release date.
 - Confirm `README.md` download instructions match the release asset names.
 - Confirm `Resources/ThirdPartyNotices` names UxPlay, GStreamer, ffmpeg, and source availability.
+- Confirm the source archive contains `third_party/UxPlay`; it is the GPLv3 corresponding source for the bundled helper.
 - Run the no-signing CI build locally.
 - For unsigned preview releases, run `scripts/package_unsigned_preview.sh` and verify the DMG installs after manual Gatekeeper approval.
 - For Developer ID releases, run `SIGNING_MODE=developer-id scripts/package_release.sh` and verify `codesign`, `spctl`, notarization, and staple checks pass.

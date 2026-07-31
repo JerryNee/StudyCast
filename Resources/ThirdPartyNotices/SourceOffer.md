@@ -1,16 +1,32 @@
 # Source Offer
 
-StudyCast release builds bundle UxPlay as `Contents/Helpers/uxplay`.
+StudyCast release builds bundle UxPlay as `Contents/Helpers/uxplay`. That helper
+is a modified UxPlay, so GPLv3 requires the corresponding source to be
+distributed with it.
+
+The source ships inside the StudyCast source archive:
+
+```
+StudyCast-<version>-source.tar.gz
+  └── third_party/
+      ├── UxPlay/          complete helper source, modifications applied
+      ├── uxplay-patches/  the modifications as a patch series
+      └── README.md        upstream URL, base commit, how to rebuild
+```
+
+No separate UxPlay archive is published. The vendored tree is the exact source
+the bundled helper is built from, and the patch series shows what was changed
+relative to upstream.
 
 Each binary release must publish:
 
-- The exact UxPlay source archive used for `Contents/Helpers/uxplay`.
-- The UxPlay commit hash in the release notes.
-- Any local UxPlay patches applied before building the helper.
+- The StudyCast source archive, which carries `third_party/UxPlay`.
+- The commit identifying the vendored helper, in the release notes.
 - The GPLv3 license text.
 
-The local release scripts require `UXPLAY_SOURCE_DIR` and `UXPLAY_COMMIT` so the
-matching source archive can be attached to GitHub Releases.
+If a release ever bundles a helper built from a tree outside this repository,
+`scripts/package_release.sh` emits a matching `UxPlay-<commit>-source.tar.gz`,
+and that archive must be published alongside the DMG.
 
 StudyCast release builds also bundle GStreamer dynamic libraries/plugins and
 ffmpeg/ffprobe from the local Homebrew installation. Include the matching

@@ -3,9 +3,11 @@
 StudyCast release builds bundle UxPlay, ffmpeg, ffprobe, and GStreamer runtime
 components.
 
-UxPlay is distributed under the GNU General Public License version 3. Its source
-code, exact commit, license text, and any local patches must be published with
-each StudyCast binary release.
+UxPlay is distributed under the GNU General Public License version 3. StudyCast
+bundles a modified UxPlay, and its complete source lives in `third_party/UxPlay`
+with the modifications also kept as a patch series in `third_party/uxplay-patches`.
+Publishing the StudyCast source archive therefore satisfies the source
+requirement; see SourceOffer.md.
 
 ffmpeg and ffprobe are distributed by the FFmpeg project under license terms that
 depend on the enabled build configuration. StudyCast release builds use the

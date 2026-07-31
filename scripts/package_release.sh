@@ -101,28 +101,27 @@ else
   echo "Created an unsigned, unnotarized preview DMG. macOS Gatekeeper will require manual user approval."
 fi
 
+# The StudyCast source archive carries third_party/UxPlay, so it already is
+# the corresponding source for the bundled helper. Only a helper built from a
+# tree outside this repository needs its own archive.
 git archive --format=tar.gz --prefix="StudyCast-${RELEASE_VERSION}/" HEAD > "${SOURCE_TARBALL}"
-if [[ "${UXPLAY_SOURCE_DIR}" -ef "${VENDORED_UXPLAY_DIR}" ]]; then
-  # The vendored tree lives inside this repository, so archive it as a subtree
-  # of HEAD. Asking git for an upstream UxPlay commit would fail here: that
-  # object does not exist in this repository.
-  git -C "${REPO_ROOT}" archive \
-    --format=tar.gz \
-    --prefix="UxPlay-${UXPLAY_COMMIT}/" \
-    HEAD:third_party/UxPlay > "${UXPLAY_TARBALL}"
-elif git -C "${UXPLAY_SOURCE_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  git -C "${UXPLAY_SOURCE_DIR}" archive \
-    --format=tar.gz \
-    --prefix="UxPlay-${UXPLAY_COMMIT}/" \
-    "${UXPLAY_COMMIT}" > "${UXPLAY_TARBALL}"
-else
-  tar -C "$(dirname "${UXPLAY_SOURCE_DIR}")" \
-    --exclude='CMakeFiles' \
-    --exclude='CMakeCache.txt' \
-    --exclude='cmake_install.cmake' \
-    --exclude='Makefile' \
-    -czf "${UXPLAY_TARBALL}" \
-    "$(basename "${UXPLAY_SOURCE_DIR}")"
+UXPLAY_ASSET=""
+if [[ ! "${UXPLAY_SOURCE_DIR}" -ef "${VENDORED_UXPLAY_DIR}" ]]; then
+  UXPLAY_ASSET="${UXPLAY_TARBALL}"
+  if git -C "${UXPLAY_SOURCE_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git -C "${UXPLAY_SOURCE_DIR}" archive \
+      --format=tar.gz \
+      --prefix="UxPlay-${UXPLAY_COMMIT}/" \
+      "${UXPLAY_COMMIT}" > "${UXPLAY_TARBALL}"
+  else
+    tar -C "$(dirname "${UXPLAY_SOURCE_DIR}")" \
+      --exclude='CMakeFiles' \
+      --exclude='CMakeCache.txt' \
+      --exclude='cmake_install.cmake' \
+      --exclude='Makefile' \
+      -czf "${UXPLAY_TARBALL}" \
+      "$(basename "${UXPLAY_SOURCE_DIR}")"
+  fi
 fi
 cp Resources/ThirdPartyNotices/ThirdPartyNotices.md "${ASSETS_DIR}/ThirdPartyNotices.md"
 cp Resources/ThirdPartyNotices/SourceOffer.md "${ASSETS_DIR}/SourceOffer.md"
@@ -132,9 +131,10 @@ popd >/dev/null
 cat <<EOF
 Release assets are ready:
 ${DMG_PATH}
-${SOURCE_TARBALL}
-${UXPLAY_TARBALL}
+${SOURCE_TARBALL}${UXPLAY_ASSET:+
+${UXPLAY_ASSET}}
 ${ASSETS_DIR}/ThirdPartyNotices.md
 ${ASSETS_DIR}/SourceOffer.md
+UxPlay helper: ${UXPLAY_SOURCE_DIR} (${UXPLAY_COMMIT})
 Signing mode: ${SIGNING_MODE}
 EOF

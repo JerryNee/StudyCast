@@ -32,9 +32,8 @@ This is the most transparent path for developers and security-sensitive users. S
 Quick path:
 
 ```sh
-brew install gstreamer ffmpeg
-export UXPLAY_SOURCE_DIR=/path/to/UxPlay
-export UXPLAY_PATH="$UXPLAY_SOURCE_DIR/uxplay"
+brew install gstreamer ffmpeg libplist openssl@3 libsodium
+(cd third_party/UxPlay && cmake . && make -j"$(sysctl -n hw.ncpu)")
 xcodebuild -project StudyCast.xcodeproj -scheme StudyCast -configuration Debug -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
 ```
 
@@ -63,8 +62,7 @@ Unsigned preview DMGs are prepared locally with:
 
 ```sh
 export RELEASE_VERSION=0.1.0-beta.2
-export UXPLAY_SOURCE_DIR=/path/to/UxPlay
-export UXPLAY_COMMIT=<exact-commit>
+(cd third_party/UxPlay && cmake . && make -j"$(sysctl -n hw.ncpu)")
 scripts/package_unsigned_preview.sh
 ```
 
@@ -74,8 +72,7 @@ Future signed and notarized DMGs can be prepared with:
 export RELEASE_VERSION=0.1.0-beta.2
 export DEVELOPER_ID_APPLICATION='Developer ID Application: Your Name (TEAMID)'
 export NOTARYTOOL_PROFILE=studycast-notary
-export UXPLAY_SOURCE_DIR=/path/to/UxPlay
-export UXPLAY_COMMIT=<exact-commit>
+(cd third_party/UxPlay && cmake . && make -j"$(sysctl -n hw.ncpu)")
 SIGNING_MODE=developer-id scripts/package_release.sh
 ```
 
