@@ -1,7 +1,7 @@
 # 向 UxPlay 上游提交 `-p2p` 的准备材料
 
-日期：2026-07-31  
-状态：**未提交。** 分支和描述都已备好，等决定是否发出。
+日期：2026-08-11
+状态：**已提交并合并。** 上游 PR [FDH2/UxPlay#544](https://github.com/FDH2/UxPlay/pull/544) 于 2026-08-09 合并；当前的合并后端口测试与回复任务见 [UXPLAY_PR_544_FOLLOWUP.md](UXPLAY_PR_544_FOLLOWUP.md)。
 
 本文的目的是让任何人（包括另一个 agent）能独立完成提交，不需要回看对话记录。
 
@@ -118,9 +118,6 @@ git show --stat HEAD
   [antimof#163](https://github.com/antimof/UxPlay/issues/163)、
   [#472](https://github.com/FDH2/UxPlay/issues/472)
 
-## 7. 提交这一步
+## 7. 提交结果
 
-需要人来做：先有自己的 fork，再 push 分支、开 PR。上游仓库 `FDH2/UxPlay` 不是本项目的 remote，不要直接往那里 push。
-
-`third_party/UxPlay` 只是文件，不是独立的 git 仓库，所以 PR 分支必须按 §2
-另外 clone 一份来做。推送前确认 remote 指向的是**你自己的 fork**。
+补丁已通过 [FDH2/UxPlay#544](https://github.com/FDH2/UxPlay/pull/544) 提交并合并。维护者合并后正在测试，并于 2026-08-11 追问固定端口和完全省略 `-p` 的行为。不要重新提交 PR；后续工作是在原 PR 下补充实测结果，具体交接见 [UXPLAY_PR_544_FOLLOWUP.md](UXPLAY_PR_544_FOLLOWUP.md)。
