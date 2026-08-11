@@ -56,59 +56,72 @@ Begin streaming to GStreamer video pipeline
 /Users/nijianwei/Desktop/Vision Pro/LPVT/UxPlay/uxplay
 ```
 
-### A. 固定非传统端口，对照组
+### A. 固定非传统端口，前置对照组
 
 ```sh
 cd "/Users/nijianwei/Desktop/Vision Pro/LPVT/UxPlay"
-./uxplay -n UxPlay-P2P-Fixed -p2p -pin 3939 -d -p 35000 2>&1 | tee /tmp/uxplay-p2p-fixed.log
+./uxplay -n UxPlay-P2P-Fixed-Before -p2p -pin 3939 -d -p 35000 2>&1 | tee /tmp/uxplay-p2p-fixed-before.log
 ```
 
-从发送端选择 `UxPlay-P2P-Fixed`，输入 PIN `3939`，投屏至少 15 秒，然后停止 UxPlay。
+从发送端选择 `UxPlay-P2P-Fixed-Before`，输入 PIN `3939`，投屏至少 15 秒，然后停止 UxPlay。
 
-### B. 完全省略 `-p`，实验组
+### B. 完全省略 `-p`，连续五轮实验组
 
 ```sh
 cd "/Users/nijianwei/Desktop/Vision Pro/LPVT/UxPlay"
-./uxplay -n UxPlay-P2P-Dynamic -p2p -pin 3939 -d 2>&1 | tee /tmp/uxplay-p2p-dynamic.log
+run=1 # 每轮依次改为 1、2、3、4、5
+./uxplay -n "UxPlay-P2P-Dynamic-$run" -p2p -pin 3939 -d 2>&1 | tee "/tmp/uxplay-p2p-dynamic-$run.log"
 ```
 
-从同一个发送端选择 `UxPlay-P2P-Dynamic`，输入相同 PIN，投屏至少 15 秒，然后停止 UxPlay。这里绝对不要添加任何形式的 `-p`。
+每一轮都重新启动 UxPlay，从同一个发送端选择当轮名称，输入相同 PIN，投屏至少 15 秒，然后停止 UxPlay。这里绝对不要添加任何形式的 `-p`。五次独立启动会重新选择端口，可检验是否存在“某些随机端口碰巧成功”的情况。
+
+### C. 固定非传统端口，后置对照组
+
+```sh
+cd "/Users/nijianwei/Desktop/Vision Pro/LPVT/UxPlay"
+./uxplay -n UxPlay-P2P-Fixed-After -p2p -pin 3939 -d -p 35000 2>&1 | tee /tmp/uxplay-p2p-fixed-after.log
+```
+
+用同一发送端再投屏至少 15 秒。前后两个固定端口对照都成功，才能排除测试过程中 AWDL、发送端或主机环境本身失效。
 
 ## 4. 每组必须记录的结果
 
 运行后分别提取：
 
 ```sh
-rg "using network ports|Accepted IPv|Local :|Remote:|connection request|Begin streaming|decryption of video packet failed" /tmp/uxplay-p2p-fixed.log /tmp/uxplay-p2p-dynamic.log
+rg "using network ports|Accepted IPv|Local :|Remote:|connection request|Begin streaming|decryption of video packet failed" /tmp/uxplay-p2p-fixed-*.log /tmp/uxplay-p2p-dynamic-*.log
 ```
 
 记录以下信息：
 
-1. UxPlay 打印的 UDP/TCP 端口。
+1. UxPlay 打印的 UDP/TCP 端口；五轮动态测试分别记录，不能只保留成功轮次。
 2. 发送端是否能发现接收器。
 3. 是否出现 `Accepted IPv6 client`。
 4. `Remote:` 是否为 `fe80::...%N`，并用 `ifconfig awdl0` 确认 AWDL 正常。
 5. 是否出现 `Begin streaming to GStreamer video pipeline`，画面是否持续至少 15 秒。
-6. 发送端型号、macOS 防火墙状态，以及两组之间是否改变过 Wi-Fi、蓝牙、MDM 或系统 AirPlay Receiver 设置。
+6. 发送端型号、macOS 防火墙状态，以及各轮之间是否改变过 Wi-Fi、蓝牙、MDM 或系统 AirPlay Receiver 设置。
+
+一次动态端口成功足以证明“`-p` 并非建立 AWDL 会话的绝对前提”，但不能证明省略 `-p` 后足够稳定。对可靠性的结论必须报告成功次数，例如 `5/5`，不能只写“works”。
 
 ## 5. 如何判定
 
-- A、B 都成功：`-p` 不是 AWDL 或 AirPlay 协议要求，只用于端口可预测性、防火墙配置等场景。
-- A 成功、B 失败：先不要断言协议要求 `-p`。保留两份日志，检查动态端口是否正确进入 DNS-SD SRV、是否有防火墙拦截，以及连接是否到达监听 socket。
-- A、B 都失败：测试环境本身没有复现既有成功条件，本次 A/B 无效，不能回复结论。
-- B 成功、A 失败：大概率是固定端口冲突或本机环境问题，不是协议偏好动态端口。
+- 两个固定端口对照都成功，动态端口 `5/5` 成功：有力支持 `-p` 不是 AWDL 或 AirPlay 协议要求，在本测试环境中也未观察到随机端口不稳定；它主要用于端口可预测性和防火墙配置。
+- 两个对照成功，动态端口有成功也有失败：可以说 `-p` 不是绝对前提，但不能说省略后可靠。保留全部日志，检查失败轮次的 DNS-SD SRV、端口过滤、服务发现缓存和监听 socket。
+- 两个对照成功，动态端口 `0/5`：先不要断言协议要求 `-p`；更可能是动态端口发布、缓存或防火墙问题，需要继续定位。
+- 任一固定端口对照失败：测试环境没有持续复现既有成功条件，本次可靠性比较无效。
+- 动态端口成功而两个固定对照失败：大概率是固定端口冲突或本机环境问题，不是协议偏好动态端口。
 
 ## 6. GitHub 追加回复模板
 
 只有完成测试后才使用，并把方括号内容换成真实结果：
 
 ```text
-I ran the promised A/B test on the same host and sender.
+I ran the promised repeated A/B test on the same host and sender.
 
-Fixed-port control (`-p 35000`): [discovered/connected/streamed], accepted on TCP [port], remote `[fe80 address with scope]`.
-Dynamic-port run (no `-p` at all): [discovered/connected/streamed], UxPlay selected TCP [ports], accepted on TCP [port], remote `[fe80 address with scope]`.
+Fixed-port controls before and after (`-p 35000`): [results], accepted on TCP [ports], remote `[fe80 addresses with scope]`.
+Dynamic-port runs (no `-p` at all): [N/5] discovered, connected and streamed. UxPlay selected TCP [port sets]; successful accepts used TCP [ports], remote `[fe80 addresses with scope]`.
 
-[Conclusion supported by the two runs.] The relevant log markers were `Accepted IPv6 client`, the `Remote: fe80::...%N` AWDL endpoint, and `Begin streaming to GStreamer video pipeline`.
+[Conclusion supported by all runs.] The relevant log markers were `Accepted IPv6 client`, the `Remote: fe80::...%N` AWDL endpoint, and `Begin streaming to GStreamer video pipeline`.
 ```
 
 追加到原 PR #544，不要新开 issue 或 PR。回复前先检查维护者在测试期间是否又补充了问题。
