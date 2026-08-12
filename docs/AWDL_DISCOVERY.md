@@ -141,8 +141,18 @@ StudyCast 已在 `AppModel.startProjection()` 中检测该设置，为关闭时�
     `gst_gl_invoke_on_main` 触发，SIGABRT，2026-08-12 复现一次（画面尚未显示
     即崩溃，相同参数立即重跑正常，判为间歇性）。
 
-  两者都属既有缺陷、早于 `-p2p` 改动。接收端进程死亡的影响现已缓解：工位可
-  单独重启而不波及其他工位，见 `Station.restartReceiver()`。
+  两者都属既有缺陷、早于 `-p2p` 改动。teardown 那个于 2026-08-12 在真实
+  StudyCast 会话中再次复现（发送端断开时接收端自行 abort）。
+
+  **崩溃的后果已经大幅缓解，但崩溃本身仍未修复：**
+  - 录像不再随崩溃丢失。UxPlay 的 mp4 管线改为分片写入
+    （`mp4mux fragment-duration=2000 fragment-mode=first-moov-then-finalise`，
+    见 `third_party/uxplay-patches/0006-*.patch`），录制过程中持续落盘，
+    正常停止时仍收尾成常规 MP4。上述那次真实崩溃后文件立即可读：
+    1,763,611 字节 / 43.1 秒 / 843 个视频包，并成功裁出 23 秒剪辑。
+    **改动前同样的崩溃会留下 0 字节，整场尽失。**
+  - 工位可单独重启而不波及其他工位，见 `Station.restartReceiver()`；
+    每次启动使用独立 staging base，重启不会覆盖既有片段。
 
 - ~~**跨片段剪辑偏移错误**~~（2026-08-12 已修）：一次 Projection 内若发送端
   断开重连、或接收端被重启，UxPlay 会产生多个录像片段。此前片段虽已全部保留，

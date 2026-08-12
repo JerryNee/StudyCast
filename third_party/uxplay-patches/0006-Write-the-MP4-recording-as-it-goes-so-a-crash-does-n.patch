@@ -1,0 +1,68 @@
+From 7686723a90adbd9e4693d0b6da8b440c79452a68 Mon Sep 17 00:00:00 2001
+From: JerryNee <ni12@illinois.edu>
+Date: Wed, 12 Aug 2026 11:57:42 -0500
+Subject: [PATCH] Write the MP4 recording as it goes, so a crash does not take
+ it all
+
+A default mp4mux holds the whole recording until EOS, when it finally writes
+the moov atom. Nothing reaches the disk before that: a session recorded for
+half a minute leaves a zero-byte file on disk the entire time. If the receiver
+process dies -- and it does, on the GStreamer teardown fault that aborts with
+"pthread_mutex_lock: Invalid argument" when a sender disconnects -- the file
+is still empty and the entire recording is gone. Nothing can recover it,
+because the data never left the muxer's memory; there is no truncated file for
+a repair tool to work from.
+
+fragment-mode=first-moov-then-finalise writes a moov up front and then
+fragments as recording proceeds, and on a clean stop finalises the file into an
+ordinary MP4. The normal path still produces a conventional recording, and an
+abrupt death now costs at most the last fragment.
+
+Verified against a real occurrence rather than a simulated one. During testing
+a receiver aborted on its own with exactly that teardown fault, forty-three
+seconds into a mirroring session. The file was readable immediately afterwards
+-- 1,763,611 bytes, 43.1 seconds, 843 video packets, frames intact and
+timestamped as expected -- and trimming a marked interval out of it produced a
+normal 23-second clip. The same crash on the previous build leaves 0 bytes.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ renderers/mux_renderer.c | 22 +++++++++++++++++++++-
+ 1 file changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/renderers/mux_renderer.c b/renderers/mux_renderer.c
+index 648cf1a..4a3eabf 100644
+--- a/renderers/mux_renderer.c
++++ b/renderers/mux_renderer.c
+@@ -132,7 +132,27 @@ void mux_renderer_start(void) {
+         }
+         g_string_append(launch, "mux. ");
+     }
+-    g_string_append(launch, "mp4mux name=mux ! filesink name=filesink location=");
++    /*
++     * Write the recording incrementally instead of holding it until the muxer
++     * closes the file.
++     *
++     * A default mp4mux keeps everything until EOS, when it finally writes the
++     * moov atom. Nothing reaches the disk before that: a recording killed
++     * after half a minute leaves a zero-byte file, and there is nothing for a
++     * repair tool to work with because the data never left memory. If the
++     * receiver process dies -- and it can, on a GStreamer teardown fault --
++     * the whole session's recording goes with it.
++     *
++     * fragment-mode=first-moov-then-finalise writes a moov up front and then
++     * fragments as it goes, so the file is readable from the first seconds
++     * onward, and on a clean stop it is finalised into an ordinary MP4. So the
++     * normal case still produces a conventional file, and an abrupt death now
++     * costs at most the last fragment instead of everything.
++     */
++    g_string_append(launch,
++                    "mp4mux name=mux fragment-duration=2000 "
++                    "fragment-mode=first-moov-then-finalise "
++                    "! filesink name=filesink location=");
+     g_string_append(launch, filename->str);
+ 
+     logger_log(logger, LOGGER_DEBUG, "created Mux pipeline: %s", launch->str);
+-- 
+2.54.0 (Apple Git-156)
+
