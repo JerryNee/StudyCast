@@ -431,6 +431,17 @@ private struct StationTile: View {
                 Text(station.pairingPIN).font(.caption2.monospaced())
                     .textSelection(.enabled)
                 Spacer()
+                if station.state == .receiverDied {
+                    Button {
+                        station.restartReceiver()
+                    } label: {
+                        Label("重启接收端", systemImage: "arrow.clockwise")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(Color.orange)
+                    .help("该工位的接收端已退出。重启它不会影响其他工位或已录制的片段。")
+                }
                 maximizeButton(foregroundStyle: isMaximized ? Color.accentColor : Color.secondary)
                 Circle().fill(dotColor).frame(width: 8, height: 8)
             }
@@ -600,10 +611,11 @@ private struct StationTile: View {
 
     private var icon: String {
         switch station.state {
-        case .recording: return "record.circle"
-        case .projecting:return "airplayvideo"
-        case .error:     return "exclamationmark.triangle"
-        default:         return "video"
+        case .recording:    return "record.circle"
+        case .projecting:   return "airplayvideo"
+        case .receiverDied: return "exclamationmark.arrow.circlepath"
+        case .error:        return "exclamationmark.triangle"
+        default:            return "video"
         }
     }
 
@@ -613,6 +625,7 @@ private struct StationTile: View {
         case .projecting:   return "投屏接收中"
         case .recording:    return "录制中"
         case .stopped:      return "已停止"
+        case .receiverDied: return "接收端已退出 — 点击重启"
         case .error(let m): return m
         }
     }
@@ -635,11 +648,12 @@ private struct StationTile: View {
 
     private var dotColor: Color {
         switch station.state {
-        case .recording: return .red
-        case .projecting:return .green
-        case .error:     return .orange
-        case .stopped:   return .gray
-        case .idle:      return .secondary
+        case .recording:    return .red
+        case .projecting:   return .green
+        case .receiverDied: return .orange
+        case .error:        return .orange
+        case .stopped:      return .gray
+        case .idle:         return .secondary
         }
     }
 }

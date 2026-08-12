@@ -12,6 +12,10 @@ final class Station: ObservableObject, Identifiable {
         case projecting
         case recording
         case stopped
+        /// The receiver helper died while projection was still running. Kept
+        /// separate from `error` because it is recoverable: this one station
+        /// can be restarted without disturbing the others.
+        case receiverDied
         case error(String)
     }
 
@@ -36,8 +40,20 @@ final class Station: ObservableObject, Identifiable {
         let stop: Date
     }
 
+    /// Slack allowed when deciding whether a marked interval predates the
+    /// segment being trimmed. Filesystem creation dates are coarse, so an
+    /// interval marked at the very start of a segment can read as slightly
+    /// earlier than the file itself.
+    private static let segmentBoundaryTolerance: TimeInterval = 0.5
+
     private var stagingBase: URL?
     private var destinationBase: URL?
+    private var launchSettings: LaunchSettings?
+
+    private struct LaunchSettings {
+        let uxplayPath: String
+        let useMacWireIdentity: Bool
+    }
     private var errorHandler: ((String) -> Void)?
     private var recordStartDate: Date?
     private var clipIntervals: [ClipInterval] = []
@@ -69,32 +85,74 @@ final class Station: ObservableObject, Identifiable {
                          stagingBase: URL,
                          destinationBase: URL,
                          onError: @escaping (String) -> Void) {
+        self.stagingBase = stagingBase
+        self.destinationBase = destinationBase
+        self.errorHandler = onError
+        self.launchSettings = LaunchSettings(uxplayPath: uxplayPath,
+                                             useMacWireIdentity: useMacWireIdentity)
+        recordStartDate = nil
+        clipIntervals = []
+        outputFile = nil
+        preview.start(ports: mediaPorts, audioOutputDeviceID: resolvedSelectedAudioOutputDeviceID)
+        launchReceiver(isRestart: false)
+    }
+
+    /// Relaunches this station's receiver after it died, leaving the other
+    /// stations and this station's recording state alone.
+    func restartReceiver() {
+        guard state == .receiverDied else { return }
+        launchReceiver(isRestart: true)
+    }
+
+    private func launchReceiver(isRestart: Bool) {
+        guard let stagingBase, let launchSettings else { return }
         do {
-            self.stagingBase = stagingBase
-            self.destinationBase = destinationBase
-            self.errorHandler = onError
-            recordStartDate = nil
-            clipIntervals = []
-            outputFile = nil
-            preview.start(ports: mediaPorts, audioOutputDeviceID: resolvedSelectedAudioOutputDeviceID)
-            try proc.start(uxplayPath: uxplayPath,
+            try proc.start(uxplayPath: launchSettings.uxplayPath,
                            name: airplayName,
                            basePort: basePort,
                            mac: mac,
                            pairingPIN: pairingPIN,
-                           useMacWireIdentity: useMacWireIdentity,
+                           useMacWireIdentity: launchSettings.useMacWireIdentity,
                            mediaPorts: mediaPorts,
                            mp4Base: stagingBase,
                            onStreamingChanged: { [weak self] streaming in
                                guard let self, !streaming else { return }
                                self.preview.clearFrame()
+                           },
+                           onUnexpectedExit: { [weak self] status in
+                               self?.handleReceiverDeath(status: status)
                            })
-            state = .projecting
+            // A restart keeps any recording intervals already marked; UxPlay
+            // starts a new numbered segment, and every segment is preserved.
+            state = recordStartDate == nil ? .projecting : .recording
         } catch {
-            preview.stop()
+            if !isRestart {
+                preview.stop()
+            }
             state = .error(error.localizedDescription)
-            onError("\(label): 投屏接收端启动失败 — \(error.localizedDescription)")
+            errorHandler?("\(label): 投屏接收端启动失败 — \(error.localizedDescription)")
         }
+    }
+
+    private func handleReceiverDeath(status: Int32) {
+        guard state != .stopped, state != .idle else { return }
+        preview.clearFrame()
+
+        // Close any open interval at the moment of death, so no marked interval
+        // straddles two segments. Restarting makes UxPlay begin a new segment,
+        // and an interval spanning the boundary cannot be trimmed from either.
+        // Recording does not resume by itself: the operator restarts the
+        // receiver, then presses record again if they still want it.
+        let wasRecording = recordStartDate != nil
+        if wasRecording {
+            stopRecording()
+        }
+
+        state = .receiverDied
+        let suffix = wasRecording
+            ? "，录制已在该点停止（已标记的区间已保存），重启后需要重新开始录制"
+            : ""
+        errorHandler?("\(label): 接收端意外退出（状态 \(status)），可在该工位上重启\(suffix)")
     }
 
     func applySelectedAudioOutput() {
@@ -155,7 +213,25 @@ final class Station: ObservableObject, Identifiable {
             ?? clipIntervals[0].start
 
         var lastOutput: URL?
+        var skipped: [Int] = []
         for (idx, interval) in clipIntervals.enumerated() {
+            let rawOffset = interval.start.timeIntervalSince(masterStart)
+
+            // A meaningfully negative offset means this interval was marked
+            // before the segment being trimmed even started, so it belongs to
+            // an earlier segment -- produced when the receiver was restarted or
+            // a sender dropped and reconnected. Clamping it to zero would cut
+            // unrelated footage and hand back a clip that looks valid, so skip
+            // it and report it instead. Nothing is lost: every segment is kept
+            // on disk as a `.master*` file and can be trimmed by hand.
+            //
+            // This is a guard, not the fix. Trimming each interval from the
+            // segment it actually belongs to is the real repair.
+            if rawOffset < -Station.segmentBoundaryTolerance {
+                skipped.append(idx + 1)
+                continue
+            }
+
             let output: URL
             if clipIntervals.count == 1 {
                 output = URL(fileURLWithPath: destinationBase.path + ".mp4")
@@ -167,10 +243,20 @@ final class Station: ObservableObject, Identifiable {
                 try FileManager.default.removeItem(at: output)
             }
 
-            let offset = max(0, interval.start.timeIntervalSince(masterStart))
+            let offset = max(0, rawOffset)
             let duration = max(0.25, interval.stop.timeIntervalSince(interval.start))
             try runFFmpegTrim(input: master, output: output, offset: offset, duration: duration)
             lastOutput = output
+        }
+
+        if !skipped.isEmpty {
+            let list = skipped.map(String.init).joined(separator: "、")
+            errorHandler?("""
+            \(label): 第 \(list) 段标记来自更早的录像片段，未生成剪辑。
+            该工位本次投屏中接收端重启过或发送端重连过，产生了多个片段，
+            而剪辑目前只能从最新片段计算偏移。所有片段都已保留为
+            `.master*` 文件，可手动裁剪。
+            """)
         }
 
         return lastOutput

@@ -33,6 +33,8 @@ final class UxPlayProcess {
     private var process: Process?
     private var logHandle: FileHandle?
     private var outputPipe: Pipe?
+    /// Distinguishes a helper we asked to quit from one that died on its own.
+    private var isStopping = false
 
     var isRunning: Bool {
         process?.isRunning == true
@@ -46,7 +48,8 @@ final class UxPlayProcess {
                useMacWireIdentity: Bool,
                mediaPorts: StationMediaPorts,
                mp4Base: URL,
-               onStreamingChanged: @escaping (Bool) -> Void) throws {
+               onStreamingChanged: @escaping (Bool) -> Void,
+               onUnexpectedExit: @escaping (Int32) -> Void) throws {
         guard process == nil else { return }
 
         let p = Process()
@@ -130,6 +133,21 @@ final class UxPlayProcess {
             scanner.consume(fileHandle.availableData)
         }
 
+        // The helper can die on its own -- GStreamer has aborted during
+        // teardown after a sender disconnects. Nothing else notices: the
+        // station simply stops receiving and disappears from AirPlay lists,
+        // with no error anywhere. Report it so the tile can say so.
+        p.terminationHandler = { finished in
+            Task { @MainActor [weak self] in
+                guard let self, self.process === finished, !self.isStopping else {
+                    return
+                }
+                self.process = nil
+                onUnexpectedExit(finished.terminationStatus)
+            }
+        }
+
+        isStopping = false
         try p.run()
         process = p
     }
@@ -184,7 +202,11 @@ final class UxPlayProcess {
     }
 
     func stopProjection() async {
-        guard let p = process else { return }
+        guard let p = process else {
+            cleanUpOutput()
+            return
+        }
+        isStopping = true
         p.interrupt()
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             DispatchQueue.global().async {
@@ -192,8 +214,13 @@ final class UxPlayProcess {
                 cont.resume()
             }
         }
-        // Drain whatever UxPlay wrote as it shut down, then detach the handler
-        // so the pipe can be released.
+        cleanUpOutput()
+        process = nil
+    }
+
+    /// Drains whatever UxPlay wrote as it shut down, then detaches the handler
+    /// so the pipe can be released. Safe to call when the helper already died.
+    private func cleanUpOutput() {
         if let pipe = outputPipe {
             pipe.fileHandleForReading.readabilityHandler = nil
             if let remaining = try? pipe.fileHandleForReading.readToEnd(),
@@ -204,7 +231,6 @@ final class UxPlayProcess {
         }
         try? logHandle?.close()
         logHandle = nil
-        process = nil
     }
 
     static func canResolveUxPlay(developmentPath: String) -> Bool {
