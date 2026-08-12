@@ -31,6 +31,14 @@ struct ContentView: View {
                     .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            if let warning = model.lastWarning {
+                Text(warning)
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .textSelection(.enabled)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             GeometryReader { proxy in
                 if let station = maximizedStation {
                     stationTile(station, isMaximized: true)

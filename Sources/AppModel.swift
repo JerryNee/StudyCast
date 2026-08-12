@@ -18,6 +18,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var isRecording = false
     @Published private(set) var currentSessionDir: URL?
     @Published var lastError: String?
+    @Published var lastWarning: String?
 
     let audioOutputManager: AudioOutputManager
 
@@ -31,6 +32,28 @@ final class AppModel: ObservableObject {
     /// vendored tree, or point UXPLAY_PATH at a build of it.
     static let defaultUxplayPath = ProcessInfo.processInfo.environment["UXPLAY_PATH"]
         ?? "/opt/homebrew/bin/uxplay"
+
+    /// Whether macOS's own AirPlay Receiver is switched on.
+    ///
+    /// Stations are published over Apple peer-to-peer, and on macOS 27 that
+    /// path only carries an incoming connection while this system setting is
+    /// enabled. With it off, a sender still discovers the station and lists it,
+    /// but the connection is refused and the helper never sees a single byte --
+    /// no `Accepted IPv6 client`, no `Remote:`, nothing. Measured 8/8 success
+    /// with it on against 0/3 with it off, same host and sender; `awdl0` stayed
+    /// up in both states, so the interface is not what goes away.
+    ///
+    /// Returns nil when the key has never been written, which is not the same
+    /// as "off" -- a machine whose setting was never touched should not be
+    /// warned at.
+    static var systemAirPlayReceiverEnabled: Bool? {
+        let value = CFPreferencesCopyValue("AirplayReceiverEnabled" as CFString,
+                                           "com.apple.controlcenter" as CFString,
+                                           kCFPreferencesCurrentUser,
+                                           kCFPreferencesCurrentHost)
+        guard let number = value as? NSNumber else { return nil }
+        return number.boolValue
+    }
 
     static var defaultOutputDirectory: URL {
         let movies = FileManager.default
@@ -69,6 +92,17 @@ final class AppModel: ObservableObject {
     func startProjection() {
         guard !isProjecting else { return }
         lastError = nil
+        lastWarning = nil
+
+        if AppModel.systemAirPlayReceiverEnabled == false {
+            lastWarning = """
+            隔空播放接收器已关闭，工位可能"看得到、连不上"。
+            System Settings > General > AirDrop & Handoff > AirPlay Receiver.
+            Senders will still discover the stations, but the connection is
+            refused and nothing reaches the helper. Projection continues in
+            case the sender can reach a station over the local network instead.
+            """
+        }
 
         guard UxPlayProcess.canResolveUxPlay(developmentPath: uxplayPath) else {
             lastError = """

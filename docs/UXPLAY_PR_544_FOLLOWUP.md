@@ -1,9 +1,10 @@
 # UxPlay #544 合并后端口测试交接
 
-日期：2026-08-11
-状态：**等待实测。计划于 2026-08-12 完成并在原 PR 追加回复。**
+日期：2026-08-11（结果于 2026-08-12 补记）
+状态：**已完成。测试于 2026-08-12 执行，结果已追加至原 PR：[issuecomment-5268536294](https://github.com/FDH2/UxPlay/pull/544#issuecomment-5268536294)。**
 
 这份文件是给接手的 AI agent 或开发者看的。无需回读聊天记录；按本文执行即可。
+**第 3 节的测试已经跑完，不要重复执行**；结论见第 7 节。
 
 ## 1. 背景和待回答问题
 
@@ -125,3 +126,41 @@ Dynamic-port runs (no `-p` at all): [N/5] discovered, connected and streamed. Ux
 ```
 
 追加到原 PR #544，不要新开 issue 或 PR。回复前先检查维护者在测试期间是否又补充了问题。
+
+## 7. 实测结果（2026-08-12）
+
+发送端全程为同一台 iPad Air（`iPad13,16`）。主机防火墙 `State = 0`（disabled），
+Wi-Fi、蓝牙、系统 AirPlay Receiver 设置（`AirplayReceiverEnabled = 1`、
+`AirplayReceiverAdvertising = 3`）全程未变。七轮均出现 `Begin streaming to
+GStreamer video pipeline`，`decryption of video packet failed` 计数均为 0，
+远端均为 `fe80::…%16`（该主机 `awdl0` 的 `scopeid 0x10`）。
+
+| 轮次 | 端口 | Accepted | 结果 |
+|---|---|---|---|
+| A 前置对照 `-p 35000` | UDP/TCP 35000 35001 35002 | TCP 35001 | 成功 |
+| B1 动态 | TCP 54762 | TCP 54762 | 成功 |
+| B2 动态 | TCP 54849 | TCP 54849 | 成功 |
+| B3 动态 | TCP 55037 | TCP 55037 | 成功 |
+| B4 动态 | TCP 55144 | TCP 55144 | 成功 |
+| B5 动态 | TCP 55212 | TCP 55212 | 成功 |
+| C 后置对照 `-p 35000` | UDP/TCP 35000 35001 35002 | TCP 35001 | 成功（第 2 次） |
+
+**动态端口 5/5。** 按第 5 节判定，落在第一档：有力支持 `-p` 不是 AWDL 或 AirPlay
+协议的要求，其作用是端口可预测性与防火墙配置。
+
+两个实操注意点，供以后复跑参考：
+
+- **动态端口模式下 UxPlay 不打印 `using network ports`**（该行仅在 `-p` 设置了
+  `udp[0]` 时输出）。每轮端口需从监听 socket 取：
+  `lsof -nP -p <pid> | grep -i listen`。
+- **C 轮第一次在视频窗口显示前 `SIGABRT` 崩溃**，日志留档于
+  `/tmp/uxplay-p2p-fixed-after-attempt1-crashed.log`。崩溃点是 AppKit 断言
+  `assertion failure: "!view->_descendantHasCachedVisibleRect"`，经
+  `-[GstGLNSWindow resize:height:]` → `_show_window` → `gst_gl_invoke_on_main`
+  触发，属渲染侧 GStreamer-on-macOS 缺陷，**与第 6 节记录的 teardown 阶段
+  `pthread_mutex_lock` 崩溃不是同一个**。相同参数立即重跑即正常，故判为间歇性，
+  与发现、AWDL、端口选择无关。已在 PR 回复中单独说明并提出可另开 issue。
+
+日志留档：`/tmp/uxplay-p2p-fixed-before.log`、`/tmp/uxplay-p2p-dynamic-{1..5}.log`、
+`/tmp/uxplay-p2p-fixed-after.log`、`/tmp/uxplay-p2p-fixed-after-attempt1-crashed.log`。
+`/tmp` 会被系统清理，长期保留需另行归档。

@@ -9,9 +9,10 @@ StudyCast 现在通过 Apple 的点对点 Wi-Fi（AWDL）被发现和连接，**
 
 这取代了 `AIRPLAY_P2P_FEASIBILITY_2026-07-30.md` 中「必须依赖校园网 Bonjour/AirGroup、Guest 网络或自带路由器」的结论。
 
-## 2. 让它成立的三处改动
+## 2. 让它成立的三处改动，外加一个环境先决条件
 
-全部在 UxPlay 侧，合计不到 40 行。缺任何一处都不成立。
+改动全部在 UxPlay 侧，合计不到 40 行。缺任何一处都不成立。
+除此之外还有一个不在代码里的前提，见 2.4——它同样是必需的。
 
 ### 2.1 Bonjour 注册加入 Apple 点对点
 
@@ -55,6 +56,39 @@ mDNSResponder 为点对点注册发布的随机 UUID 名字。
 
 一室多屏时这也顺带避免了投错工位。
 
+### 2.4 系统自带的「隔空播放接收器」必须开着（2026-08-12 补记）
+
+系统设置 → 通用 → 隔空投送与接力 → 隔空播放接收器。**关闭时点对点连接不成立。**
+
+同一台 Mac、同一台 iPad Air（`iPad13,16`）、同一条命令
+（`-p2p -pin 3939 -d -p 35000`）、同一网络，半小时内做的 A/B/A：
+
+| 接收器 | 独立启动次数 | 连接尝试 | 成功 |
+|---|---|---|---|
+| 开 | 8 | 8 | 8 |
+| 关 | 2 | 3 | **0** |
+| 恢复开 | 1 | 1 | 1 |
+
+关闭状态下发送端**仍然能发现并列出**接收器，但每次连接都失败，且 uxplay 侧
+日志零字节——没有 `Accepted IPv6 client`、没有 `Remote:`、没有 `connection
+request`。这与 2.2 中缺少 `SO_RECV_ANYIF` 的症状**完全一致**，排查时必须先
+排除本项，否则会误判成 helper 构建有问题。
+
+关键的反面证据：**`awdl0` 在两种状态下都保持 `status: active`**，无论 uxplay
+是否运行。所以机制不是「AWDL 接口掉线」，而是系统在接收器关闭时不再把 AWDL
+投递的入站流量交给第三方监听者；`SO_RECV_ANYIF` 单独不足以兜住。具体机制未
+定位，不要在此基础上编原理。
+
+局限：一台主机、一个发送端、一个网络。它确立的是本机上可复现的依赖关系，
+不是普遍规律。
+
+StudyCast 已在 `AppModel.startProjection()` 中检测该设置，为关闭时给出非阻断
+警告（`AppModel.systemAirPlayReceiverEnabled`，读 `com.apple.controlcenter`
+的 `AirplayReceiverEnabled`，currentHost 作用域）。键不存在时不告警，因为
+「从未设置过」不等于「已关闭」。
+
+已向上游报告：[FDH2/UxPlay#544 issuecomment-5268751102](https://github.com/FDH2/UxPlay/pull/544#issuecomment-5268751102)。
+
 ## 3. 不要伪装成 Mac 接收器
 
 存在一条看似更直接的路线：把接收端的 TXT 身份伪装成系统 Mac（`model=Mac15,6`、`srcvers=980.63.2`、完整 HomeKit 配对栈）。它**同样能拿到 AWDL**，但发送端会因此切换到 AirPlay 2 的媒体路径：不再发送 legacy `ekey`，改用一套未公开的密钥推导。结果是视频数据能送达接收端，但无法解密，画面全黑。
@@ -71,6 +105,10 @@ mDNSResponder 为点对点注册发布的随机 UUID 名字。
 已验证：
 
 - 本机 iPad（`iPad13,16`）与 iPhone（`iPhone14,7`）经 AWDL 连接并正常出画面；
+- **Apple Vision Pro（`RealityDevice14,1`）** 经 AWDL 连接并正常出画面
+  （2026-08-12 补记，此前漏列；日志见
+  `2026-07-31_14-31-46/1_Station_1.uxplay.log`，`Accepted IPv6 client on
+  socket 25, port 7000` / `Remote: fe80::…%16`，解密失败 0）；
 - **不属于本机账号的第三方 Mac** 经 AWDL 连接并成功投屏，此时网络侧的设备登记已被移除；
 - 日志确认链路为 `fe80::...%awdl0`，媒体协议走 legacy 分支（`SETUP 1`），解密失败计数为 0；
 - 双工位并发投屏正常。

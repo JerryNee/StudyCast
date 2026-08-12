@@ -11,12 +11,22 @@
 
 ## AirPlay Target Appears But Will Not Connect
 
+- **Check this first: macOS's own AirPlay Receiver must be on.** System
+  Settings → General → AirDrop & Handoff → AirPlay Receiver. With it off,
+  senders still discover the stations and list them, but every connection is
+  refused and the helper never sees a byte — no `Accepted IPv6 client`, no
+  `Remote:` line in the station log. Measured 8/8 success with it enabled
+  against 0/3 with it disabled, same Mac and same iPad. StudyCast now warns
+  when projection starts while the setting is off. Note that `awdl0` stays
+  `active` either way, so `ifconfig` will not reveal this.
 - The sender is asking for the station's pairing code. Each station shows its
   own four-digit code next to the receiver name: `1111`, `2222`, `3333`.
 - If the sender reports a connection failure without prompting for a code,
   check `SO_RECV_ANYIF` support in the UxPlay helper — see
   [AWDL_DISCOVERY.md](AWDL_DISCOVERY.md). A receiver that is visible but never
   sees an incoming connection is the signature of that option being missing.
+  Note that a disabled system AirPlay Receiver produces the *same* signature,
+  so rule the setting out before suspecting the helper build.
 
 ## Projection Starts But No Preview Appears
 
