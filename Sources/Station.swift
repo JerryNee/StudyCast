@@ -233,6 +233,8 @@ final class Station: ObservableObject, Identifiable {
         let tolerance = Station.segmentBoundaryTolerance
         var lastOutput: URL?
         var orphaned: [Int] = []
+        var lost: [Int] = []
+        var failed: [Int] = []
 
         for (idx, interval) in clipIntervals.enumerated() {
             // Each interval is trimmed from the segment it was marked during,
@@ -248,6 +250,15 @@ final class Station: ObservableObject, Identifiable {
                 $0.covers(interval.start, tolerance: tolerance)
             }) else {
                 orphaned.append(idx + 1)
+                continue
+            }
+
+            // The segment exists but holds nothing: the helper was killed
+            // before its muxer could finish the file. There is no footage to
+            // trim, and the operator should be told that rather than left to
+            // wonder why a mark produced no clip.
+            guard segment.isUsable else {
+                lost.append(idx + 1)
                 continue
             }
 
@@ -269,10 +280,37 @@ final class Station: ObservableObject, Identifiable {
             // beyond the file.
             let stop = min(interval.stop, segment.end)
             let duration = max(0.25, stop.timeIntervalSince(interval.start))
-            try runFFmpegTrim(input: segment.url, output: output, offset: offset, duration: duration)
-            lastOutput = output
+
+            // One unreadable segment must not cost the operator every clip that
+            // comes after it, nor the log move that follows this call. A
+            // partially written MP4 is large enough to look usable and still
+            // lack the moov atom, so a trim can fail on a segment that passed
+            // every check above.
+            do {
+                try runFFmpegTrim(input: segment.url,
+                                  output: output,
+                                  offset: offset,
+                                  duration: duration)
+                lastOutput = output
+            } catch {
+                failed.append(idx + 1)
+            }
         }
 
+        if !lost.isEmpty {
+            let list = lost.map(String.init).joined(separator: "、")
+            errorHandler?("""
+            \(label): 第 \(list) 段标记所在的录像片段没有写入完整，素材已丢失。
+            接收端异常终止时，正在写入的 MP4 来不及收尾，整段无法读取。
+            """)
+        }
+        if !failed.isEmpty {
+            let list = failed.map(String.init).joined(separator: "、")
+            errorHandler?("""
+            \(label): 第 \(list) 段标记裁剪失败，对应片段可能已损坏。
+            其余剪辑不受影响，片段已保留为 `.master*` 文件，可手动检查。
+            """)
+        }
         if !orphaned.isEmpty {
             let list = orphaned.map(String.init).joined(separator: "、")
             errorHandler?("""
@@ -289,7 +327,14 @@ final class Station: ObservableObject, Identifiable {
     private struct MasterSegment {
         let url: URL
         let start: Date
-        let end: Date
+        var end: Date
+
+        /// An MP4 only becomes readable when its muxer writes the moov atom on
+        /// close. A helper killed outright never gets there, so the segment it
+        /// was writing is left empty and the footage is gone. Such a segment is
+        /// still tracked, because saying "that recording did not survive" is a
+        /// far better answer than leaving the interval unexplained.
+        let isUsable: Bool
 
         /// Whether an interval marked at `date` belongs to this segment.
         /// `tolerance` absorbs the coarseness of filesystem timestamps.
@@ -347,6 +392,8 @@ final class Station: ObservableObject, Identifiable {
                 ?? .distantPast
             let end = values?.contentModificationDate ?? .distantFuture
 
+            let size = (try? recorded.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+
             let suffix = String(
                 recorded.lastPathComponent.dropFirst(stagingBase.lastPathComponent.count))
             let masterURL = destinationBase.deletingLastPathComponent()
@@ -356,10 +403,27 @@ final class Station: ObservableObject, Identifiable {
                 try fm.removeItem(at: masterURL)
             }
             try fm.moveItem(at: recorded, to: masterURL)
-            moved.append(MasterSegment(url: masterURL, start: start, end: max(start, end)))
+            moved.append(MasterSegment(url: masterURL,
+                                       start: start,
+                                       end: max(start, end),
+                                       isUsable: size > 0))
         }
 
-        return moved.sorted { $0.start < $1.start }
+        // An empty segment never had its modification date advanced, so its
+        // window is a single instant and no interval can land in it. Stretch it
+        // to where the next segment begins -- or to the end of time if it is
+        // the last, which is the usual case since the helper died writing it.
+        // Intervals marked during it then match, and can be reported as lost
+        // rather than as unexplained.
+        var ordered = moved.sorted { $0.start < $1.start }
+        for index in ordered.indices where !ordered[index].isUsable {
+            let nextStart = index + 1 < ordered.count
+                ? ordered[index + 1].start
+                : Date.distantFuture
+            ordered[index].end = max(ordered[index].end, nextStart)
+        }
+
+        return ordered
     }
 
     private func runFFmpegTrim(input: URL, output: URL, offset: TimeInterval, duration: TimeInterval) throws {
