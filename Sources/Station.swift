@@ -49,6 +49,8 @@ final class Station: ObservableObject, Identifiable {
     private var stagingBase: URL?
     private var destinationBase: URL?
     private var launchSettings: LaunchSettings?
+    /// How many times the helper has been relaunched this projection run.
+    private var launchCount = 0
 
     private struct LaunchSettings {
         let uxplayPath: String
@@ -93,6 +95,7 @@ final class Station: ObservableObject, Identifiable {
         recordStartDate = nil
         clipIntervals = []
         outputFile = nil
+        launchCount = 0
         preview.start(ports: mediaPorts, audioOutputDeviceID: resolvedSelectedAudioOutputDeviceID)
         launchReceiver(isRestart: false)
     }
@@ -104,8 +107,26 @@ final class Station: ObservableObject, Identifiable {
         launchReceiver(isRestart: true)
     }
 
+    /// Staging base for one launch of the helper.
+    ///
+    /// Every path the helper writes is derived from this: the segment MP4s, the
+    /// log, the AP2 capture. A relaunched helper numbers its segments from one
+    /// again, so reusing the base would truncate the previous launch's
+    /// recording and log the moment the restarted helper opened them. Each
+    /// launch therefore gets its own base.
+    private func stagingBase(forLaunch launch: Int) -> URL? {
+        guard let stagingBase else { return nil }
+        guard launch > 0 else { return stagingBase }
+        return stagingBase.deletingLastPathComponent()
+            .appendingPathComponent("\(stagingBase.lastPathComponent)_r\(launch)")
+    }
+
     private func launchReceiver(isRestart: Bool) {
-        guard let stagingBase, let launchSettings else { return }
+        guard let launchSettings else { return }
+        if isRestart {
+            launchCount += 1
+        }
+        guard let launchBase = stagingBase(forLaunch: launchCount) else { return }
         do {
             try proc.start(uxplayPath: launchSettings.uxplayPath,
                            name: airplayName,
@@ -114,7 +135,7 @@ final class Station: ObservableObject, Identifiable {
                            pairingPIN: pairingPIN,
                            useMacWireIdentity: launchSettings.useMacWireIdentity,
                            mediaPorts: mediaPorts,
-                           mp4Base: stagingBase,
+                           mp4Base: launchBase,
                            onStreamingChanged: { [weak self] streaming in
                                guard let self, !streaming else { return }
                                self.preview.clearFrame()
@@ -277,12 +298,22 @@ final class Station: ObservableObject, Identifiable {
         }
     }
 
+    /// Whether `name` was staged by this station, from any launch of its
+    /// helper. The first launch writes `s0.…`; a relaunch writes `s0_r1.…`,
+    /// so both spellings have to be recognised or a restarted station's
+    /// recordings are left behind in the staging directory.
+    private static func isStagedFile(_ name: String, base: String) -> Bool {
+        guard name.hasPrefix(base) else { return false }
+        let rest = name.dropFirst(base.count)
+        return rest.hasPrefix(".") || rest.hasPrefix("_r")
+    }
+
     private func moveMasterToDestination() throws -> [MasterSegment] {
         guard let stagingBase, let destinationBase else { return [] }
 
         let fm = FileManager.default
         let stagingDir = stagingBase.deletingLastPathComponent()
-        let stagingPrefix = stagingBase.lastPathComponent + "."
+        let stagingPrefix = stagingBase.lastPathComponent
         guard fm.fileExists(atPath: stagingDir.path) else { return [] }
 
         let candidates = try fm.contentsOfDirectory(
@@ -291,7 +322,7 @@ final class Station: ObservableObject, Identifiable {
             options: [.skipsHiddenFiles]
         )
         .filter { url in
-            url.lastPathComponent.hasPrefix(stagingPrefix)
+            Station.isStagedFile(url.lastPathComponent, base: stagingPrefix)
                 && url.pathExtension.lowercased() == "mp4"
         }
 
@@ -434,19 +465,29 @@ final class Station: ObservableObject, Identifiable {
     }
 
     private func moveLog() throws {
-        guard let stagingBase, let destinationBase else { return }
+        guard let firstBase = stagingBase, let destinationBase else { return }
 
         let fm = FileManager.default
-        for suffix in [UxPlayProcess.logSuffix, UxPlayProcess.ap2CaptureSuffix] {
-            let staged = URL(fileURLWithPath: stagingBase.path + suffix)
-            guard fm.fileExists(atPath: staged.path) else { continue }
+        // Launch 0 writes `s0<suffix>`, a relaunch writes `s0_r1<suffix>`.
+        // Every launch's log is kept: the one from before a receiver died is
+        // usually the more interesting of the two.
+        for launch in 0...launchCount {
+            guard let base = stagingBase(forLaunch: launch) else { continue }
+            let launchTag = base.lastPathComponent
+                .dropFirst(firstBase.lastPathComponent.count)
 
-            let final = destinationBase.deletingLastPathComponent()
-                .appendingPathComponent(destinationBase.lastPathComponent + suffix)
-            if fm.fileExists(atPath: final.path) {
-                try fm.removeItem(at: final)
+            for suffix in [UxPlayProcess.logSuffix, UxPlayProcess.ap2CaptureSuffix] {
+                let staged = URL(fileURLWithPath: base.path + suffix)
+                guard fm.fileExists(atPath: staged.path) else { continue }
+
+                let final = destinationBase.deletingLastPathComponent()
+                    .appendingPathComponent(
+                        destinationBase.lastPathComponent + launchTag + suffix)
+                if fm.fileExists(atPath: final.path) {
+                    try fm.removeItem(at: final)
+                }
+                try fm.moveItem(at: staged, to: final)
             }
-            try fm.moveItem(at: staged, to: final)
         }
     }
 
