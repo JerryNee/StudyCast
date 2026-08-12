@@ -201,34 +201,32 @@ final class Station: ObservableObject, Identifiable {
     }
 
     private func finalizeMasterAndClips() throws -> URL? {
-        guard let master = try moveMasterToDestination() else { return nil }
-        guard let destinationBase else { return master }
+        let segments = try moveMasterToDestination()
+        guard let newest = segments.last?.url else { return nil }
+        guard let destinationBase else { return newest }
 
         guard !clipIntervals.isEmpty else {
-            return master
+            return newest
         }
 
-        let masterStart = (try? master.resourceValues(forKeys: [.creationDateKey]).creationDate)
-            ?? (try? master.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
-            ?? clipIntervals[0].start
-
+        let tolerance = Station.segmentBoundaryTolerance
         var lastOutput: URL?
-        var skipped: [Int] = []
-        for (idx, interval) in clipIntervals.enumerated() {
-            let rawOffset = interval.start.timeIntervalSince(masterStart)
+        var orphaned: [Int] = []
 
-            // A meaningfully negative offset means this interval was marked
-            // before the segment being trimmed even started, so it belongs to
-            // an earlier segment -- produced when the receiver was restarted or
-            // a sender dropped and reconnected. Clamping it to zero would cut
-            // unrelated footage and hand back a clip that looks valid, so skip
-            // it and report it instead. Nothing is lost: every segment is kept
-            // on disk as a `.master*` file and can be trimmed by hand.
+        for (idx, interval) in clipIntervals.enumerated() {
+            // Each interval is trimmed from the segment it was marked during,
+            // not from the newest one. A projection run produces a segment per
+            // sender connection, so an interval marked before a receiver
+            // restart or a sender reconnect lives in an earlier file; offsets
+            // computed against the newest segment would cut unrelated footage.
             //
-            // This is a guard, not the fix. Trimming each interval from the
-            // segment it actually belongs to is the real repair.
-            if rawOffset < -Station.segmentBoundaryTolerance {
-                skipped.append(idx + 1)
+            // Matching on the interval's start is deliberate. An interval is
+            // closed when its segment ends, so its start is the point that
+            // reliably identifies which segment it belongs to.
+            guard let segment = segments.last(where: {
+                $0.covers(interval.start, tolerance: tolerance)
+            }) else {
+                orphaned.append(idx + 1)
                 continue
             }
 
@@ -243,46 +241,58 @@ final class Station: ObservableObject, Identifiable {
                 try FileManager.default.removeItem(at: output)
             }
 
-            let offset = max(0, rawOffset)
-            let duration = max(0.25, interval.stop.timeIntervalSince(interval.start))
-            try runFFmpegTrim(input: master, output: output, offset: offset, duration: duration)
+            let offset = max(0, interval.start.timeIntervalSince(segment.start))
+            // Never ask ffmpeg for footage past the end of this segment: an
+            // interval left open when a receiver died is closed at the moment
+            // of death, but a coarse timestamp can still put its stop marginally
+            // beyond the file.
+            let stop = min(interval.stop, segment.end)
+            let duration = max(0.25, stop.timeIntervalSince(interval.start))
+            try runFFmpegTrim(input: segment.url, output: output, offset: offset, duration: duration)
             lastOutput = output
         }
 
-        if !skipped.isEmpty {
-            let list = skipped.map(String.init).joined(separator: "、")
+        if !orphaned.isEmpty {
+            let list = orphaned.map(String.init).joined(separator: "、")
             errorHandler?("""
-            \(label): 第 \(list) 段标记来自更早的录像片段，未生成剪辑。
-            该工位本次投屏中接收端重启过或发送端重连过，产生了多个片段，
-            而剪辑目前只能从最新片段计算偏移。所有片段都已保留为
-            `.master*` 文件，可手动裁剪。
+            \(label): 第 \(list) 段标记找不到对应的录像片段，未生成剪辑。
+            所有片段都已保留为 `.master*` 文件，可手动裁剪。
             """)
         }
 
         return lastOutput
     }
 
-    private func moveMasterToDestination() throws -> URL? {
-        guard let stagingBase, let destinationBase else { return nil }
+    /// One continuous MP4 written by UxPlay, with the wall-clock window it
+    /// covers. A projection run yields one per sender connection.
+    private struct MasterSegment {
+        let url: URL
+        let start: Date
+        let end: Date
+
+        /// Whether an interval marked at `date` belongs to this segment.
+        /// `tolerance` absorbs the coarseness of filesystem timestamps.
+        func covers(_ date: Date, tolerance: TimeInterval) -> Bool {
+            date >= start - tolerance && date <= end + tolerance
+        }
+    }
+
+    private func moveMasterToDestination() throws -> [MasterSegment] {
+        guard let stagingBase, let destinationBase else { return [] }
 
         let fm = FileManager.default
         let stagingDir = stagingBase.deletingLastPathComponent()
         let stagingPrefix = stagingBase.lastPathComponent + "."
-        guard fm.fileExists(atPath: stagingDir.path) else { return nil }
+        guard fm.fileExists(atPath: stagingDir.path) else { return [] }
 
         let candidates = try fm.contentsOfDirectory(
             at: stagingDir,
-            includingPropertiesForKeys: [.contentModificationDateKey],
+            includingPropertiesForKeys: [.creationDateKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles]
         )
         .filter { url in
             url.lastPathComponent.hasPrefix(stagingPrefix)
                 && url.pathExtension.lowercased() == "mp4"
-        }
-        .sorted { lhs, rhs in
-            let lhsDate = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-            let rhsDate = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-            return lhsDate > rhsDate
         }
 
         // UxPlay starts a new numbered MP4 every time a sender connects, so a
@@ -290,8 +300,22 @@ final class Station: ObservableObject, Identifiable {
         // taking only the newest silently discarded everything recorded before
         // a sender dropped and reconnected. The staging name already carries
         // the segment number, so the destination names stay distinct.
-        var moved: [URL] = []
+        //
+        // The window each segment covers is read here, before the move, and
+        // carried alongside the destination URL. A segment's creation date is
+        // when UxPlay opened the file and its modification date is when it
+        // stopped writing, which is exactly the wall-clock span the footage
+        // covers -- that is what lets a marked interval be matched to the
+        // segment it was actually marked during.
+        var moved: [MasterSegment] = []
         for recorded in candidates {
+            let values = try? recorded.resourceValues(
+                forKeys: [.creationDateKey, .contentModificationDateKey])
+            let start = values?.creationDate
+                ?? values?.contentModificationDate
+                ?? .distantPast
+            let end = values?.contentModificationDate ?? .distantFuture
+
             let suffix = String(
                 recorded.lastPathComponent.dropFirst(stagingBase.lastPathComponent.count))
             let masterURL = destinationBase.deletingLastPathComponent()
@@ -301,11 +325,10 @@ final class Station: ObservableObject, Identifiable {
                 try fm.removeItem(at: masterURL)
             }
             try fm.moveItem(at: recorded, to: masterURL)
-            moved.append(masterURL)
+            moved.append(MasterSegment(url: masterURL, start: start, end: max(start, end)))
         }
 
-        // Sorted newest first, so this is the segment clip trimming works from.
-        return moved.first
+        return moved.sorted { $0.start < $1.start }
     }
 
     private func runFFmpegTrim(input: URL, output: URL, offset: TimeInterval, duration: TimeInterval) throws {

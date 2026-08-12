@@ -132,5 +132,22 @@ StudyCast 已在 `AppModel.startProjection()` 中检测该设置，为关闭时�
 
 ## 6. 已知未解决
 
-- **GStreamer 断开时崩溃**：`GLib (gthread-posix.c): pthread_mutex_lock: Invalid argument. Aborting.`。出现在发送端断开后的清理路径，2026-07-30 与 07-31 各复现一次。属既有缺陷，早于本次改动，与 AWDL 无关。三工位场景下接收端进程死亡影响较大，建议单独排查。
-- **跨片段剪辑偏移错误**：一次 Projection 内若发送端断开重连，UxPlay 会产生多个录像片段。片段现已全部保留，但 Record 标记的区间仍只按最新片段计算偏移，早先片段中标记的区间会裁错。
+- **GStreamer 崩溃（两种，均与 AWDL 无关）**：
+  - 断开时：`GLib (gthread-posix.c): pthread_mutex_lock: Invalid argument.
+    Aborting.`，出现在发送端断开后的清理路径，2026-07-30 与 07-31 各复现一次。
+  - 窗口显示/缩放时：AppKit 断言
+    `assertion failure: "!view->_descendantHasCachedVisibleRect"`，经
+    `-[GstGLNSWindow resize:height:]` → `_show_window` →
+    `gst_gl_invoke_on_main` 触发，SIGABRT，2026-08-12 复现一次（画面尚未显示
+    即崩溃，相同参数立即重跑正常，判为间歇性）。
+
+  两者都属既有缺陷、早于 `-p2p` 改动。接收端进程死亡的影响现已缓解：工位可
+  单独重启而不波及其他工位，见 `Station.restartReceiver()`。
+
+- ~~**跨片段剪辑偏移错误**~~（2026-08-12 已修）：一次 Projection 内若发送端
+  断开重连、或接收端被重启，UxPlay 会产生多个录像片段。此前片段虽已全部保留，
+  但 Record 标记的区间一律按最新片段计算偏移，早先片段中标记的区间会被静默
+  裁错。现在每个片段在移动到输出目录前会记录自己的时间窗口（创建时间到最后
+  写入时间），每个标记区间按其起点匹配所属片段，从该片段裁剪；匹配不到片段的
+  区间不生成剪辑并明确报告，而不是裁出错误内容。此外接收端死亡时会就地闭合
+  当前区间，避免区间跨越片段边界。
