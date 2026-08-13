@@ -39,6 +39,10 @@
 - StudyCast records a continuous master while projection is running, then trims marked intervals when projection stops.
 - Click **Stop Projection** to finalize outputs.
 - Confirm bundled `ffmpeg` and `ffprobe` are present in `StudyCast.app/Contents/Helpers` for release builds.
+- If a station reports that a marked interval produced no clip, the message
+  distinguishes the causes: footage lost with a crashed receiver, a segment
+  that could not be trimmed, and a mark that matched no segment at all. See
+  [RECORDING.md](RECORDING.md) for what each means.
 
 ## Audio Output Is Missing
 

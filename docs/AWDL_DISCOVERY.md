@@ -130,6 +130,10 @@ StudyCast 已在 `AppModel.startProjection()` 中检测该设置，为关闭时�
 | `SETUP 1` 缺失 + 大量 `decryption of video packet failed` | 发送端走了 AP2 路径，说明接收端被识别为现代 Mac 接收器 |
 | 列表可见但连接不上 | 优先检查 `SO_RECV_ANYIF` 是否生效 |
 
+> 录制、片段与剪辑的完整说明见 [RECORDING.md](RECORDING.md)，包括为什么必须
+> "全程录 + 事后裁"、`-mp4-control` 按需录制为何目前不可用，以及崩溃时到底
+> 丢多少。
+
 ## 6. 已知未解决
 
 - **GStreamer 崩溃（两种，均与 AWDL 无关）**：

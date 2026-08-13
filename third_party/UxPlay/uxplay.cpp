@@ -726,6 +726,24 @@ static gboolean sighup_callback(gpointer loop) {
 }
 #endif
 
+/*
+ * KNOWN BROKEN for iOS screen mirroring -- see docs/RECORDING.md section 3.
+ *
+ * Starting here only arms the recorder: video_process() waits for the next
+ * keyframe before it writes anything, so that the stream begins with a
+ * decodable picture. An iOS mirroring sender emits exactly one IDR, at the
+ * start of the session, and never another -- measured at 1 keyframe in a
+ * 278-second recording. Ask for recording partway through a session and that
+ * keyframe never arrives, so not a single frame is ever written.
+ *
+ * The failure is silent and looks like success: the log below prints
+ * "recording control: start" and the resulting file stays empty.
+ *
+ * StudyCast does not use -mp4-control for this reason. The option is local to
+ * this fork (patch 0001), not an upstream feature. Making it usable needs
+ * a decodable starting point that does not depend on the sender, which means
+ * re-encoding from decoded frames rather than muxing the received stream.
+ */
 static void mux_control_start_recording() {
     if (!mux_configured) {
         LOGW("recording control ignored: -mp4 was not configured");
