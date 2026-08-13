@@ -1,8 +1,32 @@
 From 2428b84c206e00b7d2259e3357861e640a34c4a3 Mon Sep 17 00:00:00 2001
 From: Codex <codex@example.com>
 Date: Wed, 24 Jun 2026 18:03:29 -0500
-Subject: [PATCH 1/5] Fix StudyCast continuous MP4 audio capture
+Subject: [PATCH 1/6] Add -mp4-control: start and stop recording over a FIFO
 
+Adds an optional `-mp4-control <fifo>` that creates a named pipe and starts
+recording on "start" and finalises the current mp4 on "stop", without
+disconnecting the sender. With the option given, `-mp4` no longer begins
+recording as soon as a sender connects; it waits to be told.
+
+Supporting machinery: the sender's codec choices are cached so a recording can
+be configured later, the video codec header (SPS/PPS) is cached so it can be
+injected ahead of the first recorded frame, and audio is held back until video
+has actually started so the two streams begin together.
+
+Two things to know before using or changing this:
+
+- StudyCast does NOT pass -mp4-control. Without it, `mux_control_path` is empty
+  and every added condition collapses to the original behaviour, so this patch
+  is dormant in the shipped configuration.
+
+- It does not work for iOS screen mirroring. Recording only begins on the next
+  keyframe, and an iOS sender emits exactly one, at the start of the session --
+  measured at 1 keyframe in a 278-second recording. Asked to start partway
+  through, it logs "recording control: start" and then writes nothing at all,
+  with no error. See docs/RECORDING.md.
+
+The earlier subject line on this patch ("Fix StudyCast continuous MP4 audio
+capture") described nothing the patch does and is corrected here.
 ---
  uxplay.cpp | 248 ++++++++++++++++++++++++++++++++++++++++++++++++++++-
  1 file changed, 245 insertions(+), 3 deletions(-)

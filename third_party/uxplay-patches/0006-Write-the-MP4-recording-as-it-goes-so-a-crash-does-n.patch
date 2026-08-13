@@ -1,7 +1,7 @@
 From 7686723a90adbd9e4693d0b6da8b440c79452a68 Mon Sep 17 00:00:00 2001
 From: JerryNee <ni12@illinois.edu>
 Date: Wed, 12 Aug 2026 11:57:42 -0500
-Subject: [PATCH] Write the MP4 recording as it goes, so a crash does not take
+Subject: [PATCH 6/6] Write the MP4 recording as it goes, so a crash does not take
  it all
 
 A default mp4mux holds the whole recording until EOS, when it finally writes

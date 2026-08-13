@@ -1,7 +1,7 @@
 From 4a15fc7e4636c6fb2e08d5661470003c77dc1fd5 Mon Sep 17 00:00:00 2001
 From: JerryNee <ni12@illinois.edu>
 Date: Fri, 31 Jul 2026 17:36:35 -0500
-Subject: [PATCH 2/5] Ignore in-source cmake build output
+Subject: [PATCH 2/6] Ignore in-source cmake build output
 
 Building with `cmake .` in the source root leaves object directories, a
 generated Makefile and static libraries next to the sources, where they are

@@ -61,14 +61,19 @@ StudyCast 目前**没有使用**这个选项（Swift 侧搜不到 `-mp4-control`
 
 ### 它是本地补丁，不是上游功能
 
-上游 UxPlay 没有 `-mp4-control`。它来自本仓库的
-`third_party/uxplay-patches/0001-Fix-StudyCast-continuous-MP4-audio-capture.patch`，
+上游 UxPlay 没有 `-mp4-control`。它整个来自本仓库的补丁
+`third_party/uxplay-patches/0001-Add-mp4-control-start-and-stop-recording-over-a-FIFO.patch`，
 所以修不修、怎么修都由本项目决定，不涉及上游。
 
-注意该补丁名不副实：标题只提音频采集，实际是 +248 行，其中包含
-`-mp4-control` 这一整套按需录制机制。`UPSTREAM_PR.md` 按补丁序列判断哪些可提
-上游，读到 0001 时要知道它其实是两件不相干的事捆在一起——真要拆分或上游化，
-得先把这套录制控制单独摘出来。
+该补丁的 245 行**全部**服务于 `-mp4-control`：控制状态与 FIFO、Annex-B 解析与
+关键帧检测、SPS/PPS 缓存、编解码器信息缓存、以及 `audio_process` /
+`video_process` 里的启动门。它原先的标题是 "Fix StudyCast continuous MP4 audio
+capture"，与补丁内容毫无关系，已于 2026-08-12 更正——那个标题会让人以为它是个
+音频修复，从而既不敢删、也想不到它正是本节这个坑的来源。
+
+**当前它是休眠的**：StudyCast 不传 `-mp4-control`，`mux_control_path` 恒为空，
+补丁新增的每个条件都退化回原行为，对运行时净影响约等于零。保留它是因为真要做
+按需录制时，控制通道、状态机、生命周期这些都是现成的一半。
 
 ## 4. 真要做按需录制，唯一可行的路子
 

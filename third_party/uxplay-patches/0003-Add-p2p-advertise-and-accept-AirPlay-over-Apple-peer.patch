@@ -1,7 +1,7 @@
 From b4faa4382baa6200b71dabf6869f28306bdf286d Mon Sep 17 00:00:00 2001
 From: JerryNee <ni12@illinois.edu>
 Date: Fri, 31 Jul 2026 17:36:35 -0500
-Subject: [PATCH 3/5] Add -p2p: advertise and accept AirPlay over Apple
+Subject: [PATCH 3/6] Add -p2p: advertise and accept AirPlay over Apple
  peer-to-peer
 
 A receiver published only on the infrastructure interfaces depends on the
