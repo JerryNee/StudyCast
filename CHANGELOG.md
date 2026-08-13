@@ -12,6 +12,9 @@ All notable changes to StudyCast will be documented here.
   switches to another station, instead of freezing on the last frame.
 - Keep every recording segment from a projection run. Previously only the
   newest survived, so anything recorded before a sender reconnected was lost.
+- Remember the recording location across launches, and say in the control bar
+  where recordings go. Picking a folder used to be forgotten on quit, and the
+  path in the control bar did not look like something you could change.
 
 ## 0.1.0-beta.2 - 2026-06-25
 

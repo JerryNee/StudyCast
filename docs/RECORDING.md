@@ -92,7 +92,18 @@ capture"，与补丁内容毫无关系，已于 2026-08-12 更正——那个标
 ## 5. 文件与命名
 
 投屏进行中在 staging（`$TMPDIR/StudyCast/<会话时间戳>/`），停止投屏时搬到
-`~/Movies/StudyCast/<Study 名>/<会话时间戳>/`。
+`<录制根目录>/<Study 名>/<会话时间戳>/`。
+
+录制根目录默认是 `~/Movies/StudyCast`。`.moviesDirectory` 是按登录用户解析的，
+所以换一台机器就是那台机器上该用户的 `~/Movies/StudyCast`，没有任何机器相关的
+东西被写死。**选 Movies 不是随手选的**：Desktop / Documents / Downloads 三个目录
+受 TCC 保护，首次写入会弹权限框，而录制路径上弹框会正好落在会话中途。
+
+用户可以在控制栏的 **Recordings** 菜单里改这个根目录（"更改位置…"），选择会存进
+`UserDefaults` 的 `StudyCast.outputDirectory`，下次启动仍然有效。启动时如果记下的
+路径连父目录都不存在（典型情况：外置盘没插），会退回默认位置并在界面上说明——
+但**不覆盖存下来的偏好**，所以盘插回来重启就自动恢复。目录本身不存在是允许的，
+Start Projection 会建。
 
 | staging | 输出 | 含义 |
 |---|---|---|

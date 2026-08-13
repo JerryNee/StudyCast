@@ -19,6 +19,10 @@ The first binary release targets Apple Silicon Macs on macOS 26 or newer. Older 
 - Start and stop recording intervals while projection continues.
 - Save per-station master recordings and trimmed MP4 clips.
 - Select a monitoring audio output per station.
+- Choose where recordings are saved; the control bar always shows the current
+  location and remembers it across launches. The default is `~/Movies/StudyCast`
+  in the account running the app, and each session gets its own
+  `<Study name>/<timestamp>/` folder underneath.
 - Bundle UxPlay, GStreamer, ffmpeg, and ffprobe for release builds.
 
 ## Try StudyCast

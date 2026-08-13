@@ -103,13 +103,39 @@ struct ContentView: View {
                 }
                 .disabled(model.isProjecting)
             }
-            field("Output") {
-                Button { chooseOutput() } label: {
-                    Text(model.outputDirectory.path)
-                        .lineLimit(1).truncationMode(.middle)
-                        .frame(maxWidth: 260, alignment: .leading)
+            field("Recordings") {
+                Menu {
+                    Button {
+                        chooseOutput()
+                    } label: {
+                        Label("更改位置…", systemImage: "folder.badge.plus")
+                    }
+                    .disabled(model.isProjecting)
+
+                    Button {
+                        model.revealOutputDirectory()
+                    } label: {
+                        Label("在 Finder 中打开", systemImage: "folder")
+                    }
+
+                    Divider()
+
+                    Button {
+                        model.resetOutputDirectory()
+                    } label: {
+                        Label("恢复默认位置（~/Movies/StudyCast）", systemImage: "arrow.uturn.backward")
+                    }
+                    .disabled(model.isProjecting || model.isUsingDefaultOutputDirectory)
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "folder")
+                        Text(model.outputDirectoryDisplayPath)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .frame(maxWidth: 260, alignment: .leading)
                 }
-                .disabled(model.isProjecting)
+                .help(outputHelpText)
             }
             field("Discovery") {
                 Toggle("AP2 research mode (1)", isOn: $model.macWireIdentityEnabled)
@@ -120,6 +146,7 @@ struct ContentView: View {
             Spacer()
             if model.currentSessionDir != nil {
                 Button("Show in Finder") { model.revealOutputInFinder() }
+                    .help("在 Finder 中显示本次投屏的输出目录：\(model.sessionDestinationDescription)")
             }
             Button {
                 model.refreshAudioOutputDevices()
@@ -247,14 +274,29 @@ struct ContentView: View {
         .controlSize(.large)
     }
 
+    private var outputHelpText: String {
+        """
+        录像保存在 \(model.outputDirectory.path)
+        本次投屏的文件在 \(model.sessionDestinationDescription)
+        点击可更改位置或在 Finder 中打开。位置会被记住，下次启动仍然有效。
+        """
+    }
+
     private func chooseOutput() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.directoryURL = model.outputDirectory
+        panel.canCreateDirectories = true
+        panel.message = "选择保存录像的文件夹。每次投屏会在其中新建 <Study 名>/<时间戳>/ 子目录。"
+        panel.prompt = "选择"
+        // A remembered folder can be missing (never recorded to, or deleted);
+        // the panel opens at nothing at all if handed a path like that.
+        panel.directoryURL = FileManager.default.fileExists(atPath: model.outputDirectory.path)
+            ? model.outputDirectory
+            : AppModel.defaultOutputDirectory.deletingLastPathComponent()
         if panel.runModal() == .OK, let url = panel.url {
-            model.outputDirectory = url
+            model.setOutputDirectory(url)
         }
     }
 
