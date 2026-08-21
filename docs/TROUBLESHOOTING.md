@@ -12,7 +12,9 @@
 ## AirPlay Target Appears But Will Not Connect
 
 - **Check this first: macOS's own AirPlay Receiver must be on.** System
-  Settings → General → AirDrop & Handoff → AirPlay Receiver. With it off,
+  Settings → General → AirDrop & Continuity → AirPlay Receiver
+  (系统设置 → 通用 → 隔空投送与连续互通 → 隔空播放接收器; the pane was
+  called "AirDrop & Handoff" on macOS 15 and earlier). With it off,
   senders still discover the stations and list them, but every connection is
   refused and the helper never sees a byte — no `Accepted IPv6 client`, no
   `Remote:` line in the station log. Measured 8/8 success with it enabled

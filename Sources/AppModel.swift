@@ -193,7 +193,9 @@ final class AppModel: ObservableObject {
         if AppModel.systemAirPlayReceiverEnabled == false {
             lastWarning = """
             隔空播放接收器已关闭，工位可能"看得到、连不上"。
-            System Settings > General > AirDrop & Handoff > AirPlay Receiver.
+            系统设置 > 通用 > 隔空投送与连续互通 > 隔空播放接收器
+            (System Settings > General > AirDrop & Continuity > AirPlay Receiver;
+            named "AirDrop & Handoff" on macOS 15 and earlier.)
             Senders will still discover the stations, but the connection is
             refused and nothing reaches the helper. Projection continues in
             case the sender can reach a station over the local network instead.
